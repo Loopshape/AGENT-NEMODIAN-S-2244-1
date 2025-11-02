@@ -1,0 +1,5 @@
+{
+  "name": "Quantum Fractal AI Editor",
+  "description": "A futuristic code editor empowered by the Gemini API for advanced code analysis, generation, and optimization. Features multi-agent consensus, search grounding for up-to-date information, and a high-performance, visually rich interface.",
+  "requestFramePermissions": []
+}
