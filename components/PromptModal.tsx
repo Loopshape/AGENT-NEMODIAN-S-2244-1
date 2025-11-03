@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import type { Persona } from '../types';
 import type { AiMode } from '../App';
 
@@ -13,7 +14,7 @@ interface PromptModalProps {
         selectedAgents: string[];
     }) => void;
     personas: Persona[];
-    initialState: { prompt: string, mode: AiMode } | null;
+    initialState: { prompt: string; mode: AiMode; snippet?: string } | null;
 }
 
 /**
@@ -24,7 +25,11 @@ interface PromptModalProps {
  * @param {React.ReactNode} props.children - The button's content.
  * @returns {React.ReactElement} The rendered mode button.
  */
-const ModeButton: React.FC<{ active: boolean, onClick: () => void, children: React.ReactNode }> = ({ active, onClick, children }) => (
+const ModeButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({
+    active,
+    onClick,
+    children,
+}) => (
     <button
         type="button"
         onClick={onClick}
@@ -44,142 +49,355 @@ const ModeButton: React.FC<{ active: boolean, onClick: () => void, children: Rea
  * @param {() => void} props.onClick - The click handler.
  * @returns {React.ReactElement} The rendered agent card.
  */
-const AgentCard: React.FC<{ persona: Persona, selected: boolean, onClick: () => void }> = ({ persona, selected, onClick }) => (
+const AgentCard: React.FC<{ persona: Persona; selected: boolean; onClick: () => void }> = ({
+    persona,
+    selected,
+    onClick,
+}) => (
     <button
         type="button"
         onClick={onClick}
         title={persona.description}
         className={`p-2 rounded border text-left transition-all duration-200 ${
-            selected ? 'bg-[#4ac94a]/30 border-[#4ac94a] shadow-lg -translate-y-0.5' : 'bg-white/5 border-transparent hover:border-white/20'
+            selected
+                ? 'bg-[#4ac94a]/30 border-[#4ac94a] shadow-lg -translate-y-0.5'
+                : 'bg-white/5 border-transparent hover:border-white/20'
         }`}
     >
         <div className="font-semibold text-xs text-[#f0f0e0]">{persona.name}</div>
     </button>
 );
 
+// --- START: Tokenizer-based Highlighter (from Editor.tsx) ---
+const typeToClassMap: Record<string, string> = {
+    comment: 'text-slate-500 italic',
+    string: 'text-lime-400',
+    number: 'text-amber-500 font-semibold',
+    keyword: 'text-pink-400 font-semibold',
+    type: 'text-sky-300',
+    function: 'text-[#4ac94a]',
+    bracket: 'text-purple-400 font-bold',
+    op: 'text-slate-400',
+    id: 'text-slate-300',
+    tag: 'text-pink-400 font-semibold',
+    'attr-name': 'text-sky-300',
+    'attr-value': 'text-lime-400',
+    property: 'text-sky-300',
+    selector: 'text-amber-500',
+    key: 'text-sky-300',
+    boolean: 'text-pink-400',
+    null: 'text-purple-400',
+    unknown: 'text-slate-300',
+    error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
+};
+
+const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?: string }[]> = {
+    js: [
+        { type: 'error', regex: /^`[^`]*$/, errorMessage: 'Unterminated template literal.' },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string literal.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
+        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
+        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
+        {
+            type: 'keyword',
+            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete)\b/,
+        },
+        { type: 'boolean', regex: /^\b(true|false)\b/ },
+        { type: 'null', regex: /^\b(null|undefined)\b/ },
+        { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'op', regex: /^==|===|!=|!==|<=|>=|=>|[-+*/%=<>!&|^~?:.,;]/ },
+        { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    html: [
+        { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
+        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
+        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
+        { type: 'op', regex: /^=/ },
+        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'tag', regex: /^>/ },
+        { type: 'text', regex: /^[^<]+/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    css: [
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: 'Unterminated comment block.' },
+        { type: 'comment', regex: /^\/\*[\s\S]*?\*\// },
+        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\])(?:\s*[:>+~]\s*)?/ },
+        { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ },
+        { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s)?\b/i },
+        { type: 'op', regex: /^[:;,#.]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    json: [
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
+        { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
+        { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
+        { type: 'keyword', regex: /^\b(true|false|null)\b/ },
+        { type: 'op', regex: /^[:,]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    py: [
+        { type: 'error', regex: /^(?:'''[\s\S]*?$|"""[\s\S]*?$)/, errorMessage: 'Unterminated multi-line string.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'comment', regex: /^#[^\n]*/ },
+        { type: 'string', regex: /^(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^']*'|"[^"]*")/ },
+        {
+            type: 'keyword',
+            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|with|lambda|yield|in|is|not|and|or|pass|continue|break)\b/,
+        },
+        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
+        { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
+        { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+};
+
+interface Token {
+    type: string;
+    value: string;
+    errorMessage?: string;
+}
+
+const tokenize = (text: string, language: string): Token[] => {
+    const rules = languageRules[language] || [];
+    if (rules.length === 0) {
+        return [{ type: 'unknown', value: text }];
+    }
+
+    const tokens: Token[] = [];
+    let position = 0;
+
+    while (position < text.length) {
+        let matched = false;
+        for (const rule of rules) {
+            const match = rule.regex.exec(text.slice(position));
+            if (match && match[0].length > 0) {
+                // Ensure non-empty match
+                tokens.push({ type: rule.type, value: match[0], errorMessage: rule.errorMessage });
+                position += match[0].length;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            tokens.push({ type: 'unknown', value: text[position], errorMessage: `Invalid or unexpected token.` });
+            position++;
+        }
+    }
+    return tokens;
+};
+
+const escapeHtml = (str: string) => {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+};
+
+const highlight = (text: string, language: string): string => {
+    if (!text) return '';
+    const tokens = tokenize(text, language);
+
+    return tokens
+        .map((token) => {
+            const isError = !!token.errorMessage;
+            const safeTitle = token.errorMessage?.replace(/"/g, '&quot;');
+            const titleAttr = isError ? `title="${safeTitle}"` : '';
+            const className = isError ? typeToClassMap['error'] : typeToClassMap[token.type] || typeToClassMap['unknown'];
+
+            const escapedValue = escapeHtml(token.value);
+
+            return `<span class="${className}" ${titleAttr}>${escapedValue}</span>`;
+        })
+        .join('');
+};
+// --- END: Tokenizer-based Highlighter ---
+
 /**
- * A modal dialog for users to input prompts for the AI. It supports different modes
- * like single AI, multi-agent consensus, and grounded search. It allows for a main
- * request, pasted code snippets, and additional context.
+ * A modal for users to enter prompts, configure AI settings, and submit requests to the Gemini API.
+ * It supports different modes like single AI, multi-agent orchestrator, and search-grounded queries.
  * @param {PromptModalProps} props - The component props.
- * @param {boolean} props.isOpen - Controls whether the modal is visible.
- * @param {() => void} props.onClose - Callback function to close the modal.
- * @param {(data: { prompt: string; context: string; snippet: string; mode: AiMode; selectedAgents: string[] }) => void} props.onSubmit - Callback function to submit the prompt data to the main app.
- * @param {Persona[]} props.personas - An array of available AI agent personas for the orchestrator mode.
- * @param {{ prompt: string, mode: AiMode } | null} props.initialState - Pre-fills the modal's state, used for quick actions.
- * @returns {React.ReactElement | null} The rendered prompt modal or null if not open.
+ * @returns {React.ReactElement | null} The rendered modal or null if not open.
  */
 export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSubmit, personas, initialState }) => {
-    const [mode, setMode] = useState<AiMode>('ai');
     const [prompt, setPrompt] = useState('');
     const [context, setContext] = useState('');
     const [snippet, setSnippet] = useState('');
+    const [mode, setMode] = useState<AiMode>('ai');
     const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
 
+    const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
+
     useEffect(() => {
-        if (initialState) {
-            setMode(initialState.mode);
-            setPrompt(initialState.prompt);
-            // Pre-select 4 agents if orchestrator mode is opened
-            if (initialState.mode === 'orchestrator') {
-                setSelectedAgents(personas.slice(0, 4).map(p => p.name));
-            }
-        } else {
-            // Reset state if no initial state
-            setPrompt('');
+        if (isOpen) {
+            // Reset state on open
             setContext('');
             setSnippet('');
             setSelectedAgents([]);
+
+            // Set initial state from props
+            if (initialState) {
+                setPrompt(initialState.prompt);
+                setMode(initialState.mode);
+                setSnippet(initialState.snippet || '');
+            } else {
+                setPrompt('');
+                setMode('ai');
+                setSnippet('');
+            }
+
+            // Autofocus the prompt textarea
+            setTimeout(() => {
+                promptTextareaRef.current?.focus();
+            }, 100);
         }
-    }, [initialState, personas]);
+    }, [isOpen, initialState]);
 
-    if (!isOpen) return null;
-
-    const handleAgentClick = (agentName: string) => {
-        setSelectedAgents(prev =>
-            prev.includes(agentName)
-                ? prev.filter(name => name !== agentName)
-                : [...prev, agentName]
+    const handleAgentToggle = (personaName: string) => {
+        setSelectedAgents((prev) =>
+            prev.includes(personaName) ? prev.filter((name) => name !== personaName) : [...prev, personaName]
         );
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleSubmit = () => {
+        if (isSubmitDisabled) return;
         onSubmit({ prompt, context, snippet, mode, selectedAgents });
     };
 
+    if (!isOpen) return null;
+
+    const isSubmitDisabled = mode === 'orchestrator' && selectedAgents.length < 2;
+
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="w-full max-w-3xl bg-[#313328] border-2 border-[#4ac94a] rounded-lg flex flex-col shadow-2xl max-h-[90vh]">
-                <div className="bg-[#2e3026] text-[#f0f0e0] p-3 flex justify-between items-center border-b border-[#4ac94a]">
-                    <h2 className="text-lg font-bold quantum-pulse">Quantum Invocation</h2>
-                    <button onClick={onClose} className="text-2xl leading-none hover:text-red-500 transition-colors">&times;</button>
-                </div>
-                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                    <div>
-                        <label className="block text-sm font-semibold text-[#999966] mb-2">Execution Mode</label>
-                        <div className="flex gap-2">
-                            <ModeButton active={mode === 'ai'} onClick={() => setMode('ai')}>Quantum AI</ModeButton>
-                            <ModeButton active={mode === 'orchestrator'} onClick={() => setMode('orchestrator')}>Multi-Agent Consensus</ModeButton>
-                            <ModeButton active={mode === 'search'} onClick={() => setMode('search')}>Search & Generate</ModeButton>
-                        </div>
+        <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-2xl bg-[#313328] border border-[#4ac94a] rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <header className="p-4 border-b border-gray-700">
+                    <h2 className="text-lg font-bold text-[#f0f0e0] animation-title-pulse">Invoke Quantum AI</h2>
+                </header>
+
+                <div className="p-4 space-y-4 overflow-y-auto">
+                    <div className="flex gap-2 items-center">
+                        <ModeButton active={mode === 'ai'} onClick={() => setMode('ai')}>
+                            Quantum AI
+                        </ModeButton>
+                        <ModeButton active={mode === 'orchestrator'} onClick={() => setMode('orchestrator')}>
+                            Multi-Agent Consensus
+                        </ModeButton>
+                        <ModeButton active={mode === 'search'} onClick={() => setMode('search')}>
+                            Grounded Search
+                        </ModeButton>
                     </div>
+
                     <div>
-                        <label htmlFor="main-prompt" className="block text-sm font-semibold text-[#999966] mb-2">
+                        <label htmlFor="prompt" className="block text-sm font-bold text-[#f0f0e0] mb-2">
                             Your Request
                         </label>
                         <textarea
-                            id="main-prompt"
+                            id="prompt"
+                            ref={promptTextareaRef}
                             value={prompt}
-                            onChange={e => setPrompt(e.target.value)}
-                            placeholder="e.g., 'Refactor this component to use React Hooks and add error boundaries'"
-                            className="w-full h-32 p-2 bg-[#22241e] border border-[#999966] text-[#f0f0e0] font-mono rounded text-sm focus:border-[#4ac94a] focus:ring-0 outline-none"
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder={
+                                mode === 'search'
+                                    ? 'Ask a question for real-time search...'
+                                    : mode === 'orchestrator'
+                                    ? 'Describe the task for the agent collective...'
+                                    : 'Describe what you want to generate, refactor, or optimize...'
+                            }
+                            className="w-full h-24 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
                         />
                     </div>
-                     <div>
-                        <label htmlFor="snippet-prompt" className="block text-sm font-semibold text-[#999966] mb-2">
-                            Pasted Code Snippet (Optional)
-                        </label>
-                        <textarea
-                            id="snippet-prompt"
-                            value={snippet}
-                            onChange={e => setSnippet(e.target.value)}
-                            placeholder="Paste relevant code snippets, helper functions, or data structures here."
-                            className="w-full h-24 p-2 bg-[#22241e] border border-[#999966] text-[#f0f0e0] font-mono rounded text-sm focus:border-[#4ac94a] focus:ring-0 outline-none"
-                        />
-                    </div>
-                     <div>
-                        <label htmlFor="context-prompt" className="block text-sm font-semibold text-[#999966] mb-2">
-                            Additional Context (Optional)
-                        </label>
-                        <textarea
-                            id="context-prompt"
-                            value={context}
-                            onChange={e => setContext(e.target.value)}
-                            placeholder="Provide any extra code, examples, or constraints here. This will be sent to the AI along with the editor's content."
-                            className="w-full h-24 p-2 bg-[#22241e] border border-[#999966] text-[#f0f0e0] font-mono rounded text-sm focus:border-[#4ac94a] focus:ring-0 outline-none"
-                        />
-                    </div>
+
                     {mode === 'orchestrator' && (
-                        <div>
-                             <label className="block text-sm font-semibold text-[#999966] mb-2">Select Specialist Agents</label>
-                             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                                {personas.map(p => (
-                                    <AgentCard 
-                                        key={p.name} 
-                                        persona={p} 
-                                        selected={selectedAgents.includes(p.name)} 
-                                        onClick={() => handleAgentClick(p.name)}
+                        <div className="space-y-2">
+                            <h3 className="text-sm font-bold text-[#f0f0e0]">
+                                Select Specialist Agents (Consensus Group)
+                            </h3>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded bg-black/10 border border-white/10">
+                                {personas.map((p) => (
+                                    <AgentCard
+                                        key={p.name}
+                                        persona={p}
+                                        selected={selectedAgents.includes(p.name)}
+                                        onClick={() => handleAgentToggle(p.name)}
                                     />
                                 ))}
-                             </div>
+                            </div>
+                            <p
+                                className={`text-xs transition-colors ${
+                                    selectedAgents.length < 2 ? 'text-yellow-500' : 'text-gray-400'
+                                }`}
+                            >
+                                Select at least 2 agents. Currently selected: {selectedAgents.length}
+                            </p>
                         </div>
                     )}
-                <div className="bg-[#2e3026] p-3 flex justify-end gap-3 border-t border-[#4ac94a] mt-auto">
-                    <button type="button" onClick={onClose} className="bg-[#a03333] hover:bg-[#3366a0] px-4 py-2 rounded transition-colors text-sm">Cancel</button>
-                    <button type="submit" onClick={handleSubmit} className="bg-[#4ac94a] hover:bg-green-400 font-bold px-6 py-2 rounded transition-colors text-sm">Invoke</button>
+
+                    <div>
+                        <label htmlFor="snippet" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                            Paste a Code Snippet (optional)
+                        </label>
+                        <div className="relative">
+                            <textarea
+                                id="snippet"
+                                value={snippet}
+                                onChange={(e) => setSnippet(e.target.value)}
+                                placeholder="Paste relevant code here..."
+                                className="w-full h-32 p-2 bg-[#22241e] text-transparent caret-white font-mono border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                                spellCheck="false"
+                            />
+                            <pre
+                                className="absolute top-0 left-0 w-full h-full p-2 font-mono pointer-events-none overflow-y-auto text-sm"
+                                aria-hidden="true"
+                            >
+                                <code dangerouslySetInnerHTML={{ __html: highlight(snippet, 'js') }} />
+                            </pre>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label htmlFor="context" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                            Additional Context (optional)
+                        </label>
+                        <textarea
+                            id="context"
+                            value={context}
+                            onChange={(e) => setContext(e.target.value)}
+                            placeholder="Provide any extra information, constraints, or requirements..."
+                            className="w-full h-20 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                        />
+                    </div>
                 </div>
-                </form>
+
+                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                    <button
+                        onClick={onClose}
+                        className="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitDisabled}
+                        className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2 rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                    >
+                        {isSubmitDisabled ? 'Select more agents' : 'Invoke AI'}
+                    </button>
+                </footer>
             </div>
         </div>
     );

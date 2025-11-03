@@ -1,17 +1,16 @@
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
 
 interface EditorProps {
     content: string;
     setContent: (content: string) => void;
     fileType: string;
-    onStatsChange: (stats: { cursor: string; lines: number; chars: number; }) => void;
+    onStatsChange: (stats: { cursor: string; lines: number; chars: number }) => void;
     fontSize: number;
 }
 
 // --- START: Tokenizer-based Highlighter ---
 
-// Mapping of token types to Tailwind CSS classes
 const typeToClassMap: Record<string, string> = {
     comment: 'text-slate-500 italic',
     string: 'text-lime-400',
@@ -30,20 +29,22 @@ const typeToClassMap: Record<string, string> = {
     key: 'text-sky-300',
     boolean: 'text-pink-400',
     null: 'text-purple-400',
-    unknown: 'bg-red-500/20',
+    unknown: 'text-slate-300',
     error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
 };
 
-// Language definitions with tokenization rules (order matters)
-const languageRules: Record<string, { type: string, regex: RegExp, errorMessage?: string }[]> = {
+const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?: string }[]> = {
     js: [
-        { type: 'error', regex: /^`[^`]*$/, errorMessage: "Unterminated template literal." },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: "Unterminated string literal." },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: "Unterminated string literal." },
+        { type: 'error', regex: /^`[^`]*$/, errorMessage: 'Unterminated template literal.' },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string literal.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
         { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
         { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
-        { type: 'keyword', regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete)\b/ },
+        {
+            type: 'keyword',
+            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete)\b/,
+        },
         { type: 'boolean', regex: /^\b(true|false)\b/ },
         { type: 'null', regex: /^\b(null|undefined)\b/ },
         { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
@@ -53,20 +54,20 @@ const languageRules: Record<string, { type: string, regex: RegExp, errorMessage?
         { type: 'whitespace', regex: /^\s+/ },
     ],
     html: [
-        { type: 'error', regex: /^&lt;[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: "Unclosed HTML tag." },
-        { type: 'comment', regex: /^&lt;!--[\s\S]*?--&gt;/ },
-        { type: 'tag', regex: /^&lt;\/?[\w\d\-]+/ },
+        { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
+        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
         { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
         { type: 'op', regex: /^=/ },
         { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^&gt;/ },
+        { type: 'tag', regex: /^>/ },
+        { type: 'text', regex: /^[^<]+/ },
         { type: 'whitespace', regex: /^\s+/ },
-        { type: 'default', regex: /^[^<&]+/ },
     ],
     css: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: "Unterminated string." },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: "Unterminated string." },
-        { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: "Unterminated comment block." },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: 'Unterminated comment block.' },
         { type: 'comment', regex: /^\/\*[\s\S]*?\*\// },
         { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\])(?:\s*[:>+~]\s*)?/ },
@@ -77,7 +78,7 @@ const languageRules: Record<string, { type: string, regex: RegExp, errorMessage?
         { type: 'whitespace', regex: /^\s+/ },
     ],
     json: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: "Unterminated string." },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
         { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
         { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
         { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
@@ -87,18 +88,21 @@ const languageRules: Record<string, { type: string, regex: RegExp, errorMessage?
         { type: 'whitespace', regex: /^\s+/ },
     ],
     py: [
-        { type: 'error', regex: /^(?:'''[\s\S]*?$|"""[\s\S]*?$)/, errorMessage: "Unterminated multi-line string." },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: "Unterminated string." },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: "Unterminated string." },
+        { type: 'error', regex: /^(?:'''[\s\S]*?$|"""[\s\S]*?$)/, errorMessage: 'Unterminated multi-line string.' },
+        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
+        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
         { type: 'comment', regex: /^#[^\n]*/ },
         { type: 'string', regex: /^(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^']*'|"[^"]*")/ },
-        { type: 'keyword', regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|with|lambda|yield|in|is|not|and|or|pass|continue|break)\b/ },
+        {
+            type: 'keyword',
+            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|with|lambda|yield|in|is|not|and|or|pass|continue|break)\b/,
+        },
         { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
         { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
         { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
         { type: 'bracket', regex: /^[\[\]{}()]/ },
         { type: 'whitespace', regex: /^\s+/ },
-    ]
+    ],
 };
 
 interface Token {
@@ -107,26 +111,16 @@ interface Token {
     errorMessage?: string;
 }
 
-/**
- * Breaks down a string of code into a series of tokens based on language-specific rules.
- * @param {string} text - The input code string.
- * @param {string} language - The language identifier (e.g., 'js', 'html').
- * @returns {Token[]} An array of token objects.
- */
 const tokenize = (text: string, language: string): Token[] => {
     const rules = languageRules[language] || [];
-    if (rules.length === 0) {
-        return [{ type: 'default', value: text }];
-    }
-    
+    if (rules.length === 0) return [{ type: 'unknown', value: text }];
     const tokens: Token[] = [];
     let position = 0;
-
     while (position < text.length) {
         let matched = false;
         for (const rule of rules) {
             const match = rule.regex.exec(text.slice(position));
-            if (match) {
+            if (match && match[0].length > 0) {
                 tokens.push({ type: rule.type, value: match[0], errorMessage: rule.errorMessage });
                 position += match[0].length;
                 matched = true;
@@ -141,44 +135,70 @@ const tokenize = (text: string, language: string): Token[] => {
     return tokens;
 };
 
-/**
- * Applies syntax highlighting to a code string by converting it into a series of styled <span> elements.
- * It first escapes HTML entities in the input text to prevent XSS and rendering issues,
- * then tokenizes the text and wraps each token in a span with the appropriate CSS class.
- * It also adds a title attribute for tooltips on tokens that represent errors.
- * @param {string} text - The raw code string to highlight.
- * @param {string} language - The language identifier (e.g., 'js', 'html').
- * @returns {string} An HTML string with syntax highlighting applied.
- */
+const escapeHtml = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 const highlight = (text: string, language: string): string => {
     if (!text) return '';
-    // Escape HTML entities once before tokenizing
-    const safeText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const tokens = tokenize(safeText, language);
-
-    return tokens.map(token => {
-        const isError = !!token.errorMessage;
-        // Escape the error message for the title attribute
-        const safeTitle = token.errorMessage?.replace(/"/g, '&quot;');
-        const titleAttr = isError ? `title="${safeTitle}"` : '';
-
-        // Apply 'error' class if there's an error message, otherwise use the type-specific class.
-        const className = isError 
-            ? typeToClassMap['error'] 
-            : typeToClassMap[token.type] || '';
-        
-        // The token value is already escaped, so it can be safely rendered.
-        return `<span class="${className}" ${titleAttr}>${token.value}</span>`;
-    }).join('');
+    const tokens = tokenize(text, language);
+    return tokens
+        .map((token) => {
+            const isError = !!token.errorMessage;
+            const safeTitle = token.errorMessage?.replace(/"/g, '&quot;');
+            const titleAttr = isError ? `title="${safeTitle}"` : '';
+            const className = isError ? typeToClassMap['error'] : typeToClassMap[token.type] || typeToClassMap['unknown'];
+            const escapedValue = escapeHtml(token.value);
+            return `<span class="${className}" ${titleAttr}>${escapedValue}</span>`;
+        })
+        .join('');
 };
 
 // --- END: Tokenizer-based Highlighter ---
 
+// --- START: Selection Utilities ---
 
-/**
- * A decorative component representing a "fractal node" for visual effect in the editor background.
- * @returns {React.ReactElement} The rendered fractal node div.
- */
+const getSelectionOffset = (element: Node): { start: number; end: number } => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return { start: 0, end: 0 };
+    const range = selection.getRangeAt(0);
+    if (!element.contains(range.startContainer) || !element.contains(range.endContainer)) return { start: 0, end: 0 };
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element);
+    preCaretRange.setEnd(range.startContainer, range.startOffset);
+    const start = preCaretRange.toString().length;
+    return { start, end: start + range.toString().length };
+};
+
+const setSelectionOffset = (element: Node, offsets: { start: number; end: number }) => {
+    const { start, end } = offsets;
+    if (typeof start !== 'number' || typeof end !== 'number' || start < 0 || end < 0) return;
+    const range = document.createRange();
+    range.selectNode(element);
+    range.collapse(true);
+    let charCount = 0;
+    let foundStart = false;
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+        const nodeLength = node.textContent?.length ?? 0;
+        if (!foundStart && start >= charCount && start <= charCount + nodeLength) {
+            range.setStart(node, start - charCount);
+            foundStart = true;
+        }
+        if (foundStart && end >= charCount && end <= charCount + nodeLength) {
+            range.setEnd(node, end - charCount);
+            break;
+        }
+        charCount += nodeLength;
+    }
+    const selection = window.getSelection();
+    if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+};
+
+// --- END: Selection Utilities ---
+
 const FractalNode = () => (
     <div
         className="fractal-node absolute w-1 h-1 rounded-full bg-cyan-400"
@@ -191,90 +211,163 @@ const FractalNode = () => (
     />
 );
 
-/**
- * The main code editor component. It features a content-editable div with custom
- * tokenizer-based syntax highlighting, line numbers, and tab handling. It also reports
- * statistics like cursor position and line count back to the parent component.
- * @param {EditorProps} props - The component props.
- * @param {string} props.content - The current code/text content of the editor.
- * @param {(content: string) => void} props.setContent - A callback function to update the editor's content in the parent state.
- * @param {string} props.fileType - The language identifier for syntax highlighting (e.g., 'js', 'html').
- * @param {(stats: { cursor: string; lines: number; chars: number; }) => void} props.onStatsChange - A callback to report editor stats to the parent component.
- * @param {number} props.fontSize - The font size in pixels for the editor content.
- * @returns {React.ReactElement} The rendered editor component.
- */
+const LINE_HEIGHT_MULTIPLIER = 1.5;
+const OVERSCAN_COUNT = 10;
+
 export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, onStatsChange, fontSize }) => {
+    const editorContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<HTMLDivElement>(null);
-    const [lineNumbers, setLineNumbers] = useState('1');
-    const [showFractalNodes, setShowFractalNodes] = useState(true);
+    const selectionRef = useRef<{ start: number; end: number } | null>(null);
 
-    const updateEditorState = useCallback(() => {
-        if (!editorRef.current) return;
-        const text = editorRef.current.innerText || '';
-        const lines = text.split('\n');
-        const lineCount = lines.length;
+    const [scrollTop, setScrollTop] = useState(0);
+    const [viewportHeight, setViewportHeight] = useState(0);
+    const [showFractalNodes] = useState(true);
+    const lastContentRef = useRef(content);
 
-        setLineNumbers(Array.from({ length: lineCount }, (_, i) => i + 1).join('\n'));
+    const lineHeight = fontSize * LINE_HEIGHT_MULTIPLIER;
+    const allLines = useMemo(() => content.split('\n'), [content]);
+    const totalHeight = allLines.length * lineHeight;
 
-        // Update stats
+    const startIndex = Math.max(0, Math.floor(scrollTop / lineHeight) - OVERSCAN_COUNT);
+    const visibleNodeCount = Math.ceil(viewportHeight / lineHeight);
+    const endIndex = Math.min(allLines.length, startIndex + visibleNodeCount + OVERSCAN_COUNT * 2);
+
+    const visibleLines = useMemo(() => allLines.slice(startIndex, endIndex), [allLines, startIndex, endIndex]);
+    const paddingTop = startIndex * lineHeight;
+
+    // Observer to update viewport height on resize
+    useEffect(() => {
+        const container = editorContainerRef.current;
+        if (!container) return;
+
+        const resizeObserver = new ResizeObserver(() => {
+            setViewportHeight(container.clientHeight);
+        });
+
+        resizeObserver.observe(container);
+        setViewportHeight(container.clientHeight); // Initial set
+
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    useLayoutEffect(() => {
+        if (selectionRef.current && editorRef.current) {
+            let windowCharOffset = 0;
+            for (let i = 0; i < startIndex; i++) {
+                windowCharOffset += (allLines[i]?.length ?? 0) + 1; // +1 for newline
+            }
+            const localStart = selectionRef.current.start - windowCharOffset;
+            const localEnd = selectionRef.current.end - windowCharOffset;
+            setSelectionOffset(editorRef.current, { start: localStart, end: localEnd });
+            selectionRef.current = null;
+        }
+    });
+
+    const updateStats = useCallback(() => {
+        const lines = allLines.length;
+        const chars = content.length;
+        let lineNum = 1,
+            colNum = 0;
+
         const selection = window.getSelection();
-        let lineNum = 1, colNum = 0;
-        if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const preCaretRange = range.cloneRange();
-            preCaretRange.selectNodeContents(editorRef.current);
-            preCaretRange.setEnd(range.endContainer, range.endOffset);
-            const preCaretText = preCaretRange.toString();
-            const preCaretLines = preCaretText.split('\n');
+        if (selection?.rangeCount && editorRef.current) {
+            const localOffsets = getSelectionOffset(editorRef.current);
+            let windowCharOffset = 0;
+            for (let i = 0; i < startIndex; i++) {
+                windowCharOffset += (allLines[i]?.length ?? 0) + 1;
+            }
+            const globalOffset = localOffsets.start + windowCharOffset;
+            const textBefore = content.substring(0, globalOffset);
+            const preCaretLines = textBefore.split('\n');
             lineNum = preCaretLines.length;
             colNum = preCaretLines[preCaretLines.length - 1].length;
         }
-        onStatsChange({ cursor: `${lineNum}:${colNum}`, lines: lineCount, chars: text.length });
 
-    }, [onStatsChange]);
+        onStatsChange({ cursor: `${lineNum}:${colNum}`, lines, chars });
+    }, [allLines, content, onStatsChange, startIndex]);
 
     useEffect(() => {
-        // This effect is responsible for updating line numbers and stats
-        // when the content changes from an external source (e.g., loading a file, AI applying code).
-        updateEditorState();
-    }, [content, updateEditorState]);
+        if (content !== lastContentRef.current) {
+            if (editorRef.current) {
+                editorRef.current.innerHTML = highlight(visibleLines.join('\n'), fileType);
+            }
+            lastContentRef.current = content;
+        }
+        updateStats();
+    }, [content, fileType, visibleLines, updateStats]);
 
     const handleInput = () => {
         if (editorRef.current) {
-            setContent(editorRef.current.innerText);
+            const localSelection = getSelectionOffset(editorRef.current);
+            let windowCharOffset = 0;
+            for (let i = 0; i < startIndex; i++) {
+                windowCharOffset += (allLines[i]?.length ?? 0) + 1;
+            }
+
+            selectionRef.current = {
+                start: localSelection.start + windowCharOffset,
+                end: localSelection.end + windowCharOffset,
+            };
+
+            const newVisibleText = editorRef.current.innerText;
+            const linesBefore = allLines.slice(0, startIndex);
+            const linesAfter = allLines.slice(endIndex);
+            const newContent = [...linesBefore, ...newVisibleText.split('\n'), ...linesAfter].join('\n');
+
+            lastContentRef.current = newContent;
+            setContent(newContent);
         }
     };
-    
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key === 'Tab') {
             e.preventDefault();
             document.execCommand('insertText', false, '    ');
         }
     };
-    
+
+    const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+        setScrollTop(e.currentTarget.scrollTop);
+    }, []);
+
     return (
-        <div className="editor-container relative flex flex-1 bg-[#3a3c31] overflow-auto">
+        <div
+            ref={editorContainerRef}
+            onScroll={handleScroll}
+            className="editor-container relative flex flex-1 bg-[#3a3c31] overflow-auto"
+        >
             {showFractalNodes && (
-                 <div className="quantum-thinking absolute inset-0 pointer-events-none z-0">
-                    {Array.from({ length: 12 }).map((_, i) => <FractalNode key={i} />)}
+                <div className="quantum-thinking absolute inset-0 pointer-events-none z-0">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                        <FractalNode key={i} />
+                    ))}
                 </div>
             )}
-            <div className="line-numbers w-[50px] p-2.5 bg-[#313328] text-[#999966] text-right select-none sticky left-0 z-10 whitespace-pre"
-                 style={{ lineHeight: '1.5em', fontSize: `${fontSize}px` }}>
-                {lineNumbers}
+            <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
+                <div
+                    className="editor-window absolute top-0 left-0 w-full flex"
+                    style={{ transform: `translateY(${paddingTop}px)` }}
+                >
+                    <div
+                        className="line-numbers w-[50px] p-2.5 bg-[#313328] text-[#999966] text-right select-none sticky left-0 z-10 whitespace-pre"
+                        style={{ lineHeight: `${lineHeight}px`, fontSize: `${fontSize}px` }}
+                    >
+                        {Array.from({ length: visibleLines.length }, (_, i) => startIndex + i + 1).join('\n')}
+                    </div>
+                    <div
+                        ref={editorRef}
+                        className="editor-content flex-1 p-2.5 box-border whitespace-pre outline-none z-10"
+                        style={{ lineHeight: `${lineHeight}px`, tabSize: 4, fontSize: `${fontSize}px` }}
+                        contentEditable="true"
+                        spellCheck="false"
+                        onInput={handleInput}
+                        onKeyDown={handleKeyDown}
+                        onClick={updateStats}
+                        onKeyUp={updateStats}
+                        dangerouslySetInnerHTML={{ __html: highlight(visibleLines.join('\n'), fileType) }}
+                    ></div>
+                </div>
             </div>
-            <div
-                ref={editorRef}
-                className="editor-content flex-1 p-2.5 box-border whitespace-pre outline-none z-10"
-                style={{ lineHeight: '1.5em', tabSize: 4, fontSize: `${fontSize}px` }}
-                contentEditable="true"
-                spellCheck="false"
-                onInput={handleInput}
-                onKeyDown={handleKeyDown}
-                onClick={updateEditorState}
-                onKeyUp={updateEditorState}
-                dangerouslySetInnerHTML={{ __html: highlight(content, fileType) }}
-            ></div>
         </div>
     );
 };

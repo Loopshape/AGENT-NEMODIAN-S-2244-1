@@ -1,10 +1,11 @@
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+
+import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import type { Candidate, Persona } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
 if (!API_KEY) {
-  console.warn("Gemini API key not found. Please set the API_KEY environment variable.");
+    console.warn('Gemini API key not found. Please set the API_KEY environment variable.');
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY! });
@@ -16,13 +17,13 @@ const ai = new GoogleGenAI({ apiKey: API_KEY! });
  * @returns {Promise<GenerateContentResponse>} A promise that resolves with the grounded generation result.
  */
 export const generateWithSearch = async (prompt: string): Promise<GenerateContentResponse> => {
-  return ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: {
-      tools: [{googleSearch: {}}],
-    },
-  });
+    return ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            tools: [{ googleSearch: {} }],
+        },
+    });
 };
 
 /**
@@ -48,11 +49,11 @@ ${context}
 Produce only the final, complete, and production-ready code block as your response. Do not include any explanations, markdown formatting, or other text outside of the code.
 `;
     return ai.models.generateContentStream({
-      model: "gemini-2.5-pro",
-      contents: fullPrompt,
-      config: {
-        thinkingConfig: { thinkingBudget: 32768 }
-      },
+        model: 'gemini-2.5-pro',
+        contents: fullPrompt,
+        config: {
+            thinkingConfig: { thinkingBudget: 32768 },
+        },
     });
 };
 
@@ -62,18 +63,66 @@ Produce only the final, complete, and production-ready code block as your respon
  * @type {Persona[]}
  */
 export const personas: Persona[] = [
-    { name: "Performance Optimizer", description: "Focuses on maximum performance, low-level optimization, bit-twiddling, and efficient memory usage. Writes highly optimized, fast code." },
-    { name: "Code Readability Advocate", description: "Prioritizes clean, elegant, and maintainable code. Uses design patterns, clear naming conventions, and extensive comments." },
-    { name: "Modernist Developer", description: "Leverages the latest language features, functional programming concepts, and modern idioms to write concise and expressive code." },
-    { name: "Robustness Engineer", description: "Emphasizes resilience and reliability. Writes code with comprehensive error handling, input validation, and edge-case management." },
-    { name: "Data Structures Specialist", description: "Solves problems from a data-structures-first perspective, always choosing the most optimal data structure for the task at hand." },
-    { name: "Theoretical Scientist", description: "Approaches problems from a mathematical or theoretical computer science perspective, ensuring algorithmic purity and correctness." },
-    { name: "Simplicity Champion", description: "Advocates for simple, straightforward, and easy-to-understand solutions, avoiding unnecessary complexity. Prefers brute-force if it's clearer." },
-    { name: "Scalability Architect", description: "Designs solutions that can handle massive datasets and high concurrency, considering distributed systems principles." },
-    { name: "Security Specialist", description: "Focuses on secure coding practices, identifying potential vulnerabilities, and implementing robust defenses against common exploits." },
-    { name: "UI/UX Futurist", description: "Prioritizes an exceptional and intuitive user experience, focusing on accessibility, modern design patterns, and fluid interactivity." },
-    { name: "API Architect", description: "Designs clean, maintainable, and scalable API contracts. Focuses on RESTful principles, data modeling, and clear versioning strategies." },
-    { name: "Legacy Code Modernizer", description: "Specializes in refactoring outdated codebases, untangling monolithic structures, and upgrading them with modern design patterns and technologies." },
+    {
+        name: 'Performance Optimizer',
+        description:
+            'Focuses on maximum performance, low-level optimization, bit-twiddling, and efficient memory usage. Writes highly optimized, fast code.',
+    },
+    {
+        name: 'Code Readability Advocate',
+        description:
+            'Prioritizes clean, elegant, and maintainable code. Uses design patterns, clear naming conventions, and extensive comments.',
+    },
+    {
+        name: 'Modernist Developer',
+        description:
+            'Leverages the latest language features, functional programming concepts, and modern idioms to write concise and expressive code.',
+    },
+    {
+        name: 'Robustness Engineer',
+        description:
+            'Emphasizes resilience and reliability. Writes code with comprehensive error handling, input validation, and edge-case management.',
+    },
+    {
+        name: 'Data Structures Specialist',
+        description:
+            'Solves problems from a data-structures-first perspective, always choosing the most optimal data structure for the task at hand.',
+    },
+    {
+        name: 'Theoretical Scientist',
+        description:
+            'Approaches problems from a mathematical or theoretical computer science perspective, ensuring algorithmic purity and correctness.',
+    },
+    {
+        name: 'Simplicity Champion',
+        description:
+            "Advocates for simple, straightforward, and easy-to-understand solutions, avoiding unnecessary complexity. Prefers brute-force if it's clearer.",
+    },
+    {
+        name: 'Scalability Architect',
+        description:
+            'Designs solutions that can handle massive datasets and high concurrency, considering distributed systems principles.',
+    },
+    {
+        name: 'Security Specialist',
+        description:
+            'Focuses on secure coding practices, identifying potential vulnerabilities, and implementing robust defenses against common exploits.',
+    },
+    {
+        name: 'UI/UX Futurist',
+        description:
+            'Prioritizes an exceptional and intuitive user experience, focusing on accessibility, modern design patterns, and fluid interactivity.',
+    },
+    {
+        name: 'API Architect',
+        description:
+            'Designs clean, maintainable, and scalable API contracts. Focuses on RESTful principles, data modeling, and clear versioning strategies.',
+    },
+    {
+        name: 'Legacy Code Modernizer',
+        description:
+            'Specializes in refactoring outdated codebases, untangling monolithic structures, and upgrading them with modern design patterns and technologies.',
+    },
 ];
 
 /**
@@ -85,13 +134,17 @@ export const personas: Persona[] = [
  * @param {string[]} selectedPersonaNames - An array of names of the personas to use for this consensus run.
  * @returns {Promise<Candidate[]>} A promise that resolves to an array of scored code candidates, sorted by their consensus score.
  */
-export const runMultiAgentConsensus = async (prompt: string, context: string, selectedPersonaNames: string[]): Promise<Candidate[]> => {
-    const selectedPersonas = personas.filter(p => selectedPersonaNames.includes(p.name));
+export const runMultiAgentConsensus = async (
+    prompt: string,
+    context: string,
+    selectedPersonaNames: string[]
+): Promise<Candidate[]> => {
+    const selectedPersonas = personas.filter((p) => selectedPersonaNames.includes(p.name));
     if (selectedPersonas.length === 0) {
         return [];
     }
 
-    const prompts = selectedPersonas.map(persona => {
+    const prompts = selectedPersonas.map((persona) => {
         return `You are an AI software engineer with a highly specialized expert persona.
 Persona: ${persona.description}
 
@@ -107,14 +160,16 @@ ${context}
 Produce only the final, complete, and production-ready code block as your response. Do not include any explanations, markdown formatting, or other text outside of the code.`;
     });
 
-    const promises = prompts.map(p => ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: p,
-    }));
+    const promises = prompts.map((p) =>
+        ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: p,
+        })
+    );
 
     const responses = await Promise.all(promises);
 
-    const candidatesMap = new Map<string, { agents: string[], count: number }>();
+    const candidatesMap = new Map<string, { agents: string[]; count: number }>();
     responses.forEach((res, i) => {
         const content = res.text.trim();
         if (content) {
@@ -133,11 +188,13 @@ Produce only the final, complete, and production-ready code block as your respon
         }
     });
 
-    return Array.from(candidatesMap.entries()).map(([content, data]) => ({
-        content,
-        agents: data.agents,
-        count: data.count,
-        avgEntropy: Math.random() * 2 + 5, // mock entropy
-        score: data.count + (Math.random() * 2 + 5) * 0.1,
-    })).sort((a, b) => b.score - a.score);
+    return Array.from(candidatesMap.entries())
+        .map(([content, data]) => ({
+            content,
+            agents: data.agents,
+            count: data.count,
+            avgEntropy: Math.random() * 2 + 5, // mock entropy
+            score: data.count + (Math.random() * 2 + 5) * 0.1,
+        }))
+        .sort((a, b) => b.score - a.score);
 };
