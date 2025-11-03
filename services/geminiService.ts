@@ -11,31 +11,16 @@ if (!API_KEY) {
 const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
 /**
- * Generates content using the Gemini model with Google Search grounding.
- * This is ideal for queries that require up-to-date information from the web.
- * @param {string} prompt - The user's prompt for the AI.
- * @returns {Promise<GenerateContentResponse>} A promise that resolves with the grounded generation result.
- */
-export const generateWithSearch = async (prompt: string): Promise<GenerateContentResponse> => {
-    return ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            tools: [{ googleSearch: {} }],
-        },
-    });
-};
-
-/**
  * Generates content as a stream with the "thinking" feature enabled.
  * This provides a more detailed, step-by-step generation process for complex tasks.
  * The system prompt primes the AI to act as a world-class software architect.
  * @param {string} prompt - The user's specific request.
  * @param {string} context - The current code or context from the editor.
+ * @param {boolean} withSearch - Whether to enable Google Search grounding for the request.
  * @returns {Promise<AsyncGenerator<GenerateContentResponse>>} A promise that resolves with an async iterable stream of generated content chunks.
  */
 // FIX: Make the function async to ensure proper promise type inference for the stream.
-export const generateWithThinkingStream = async (prompt: string, context: string) => {
+export const generateWithThinkingStream = async (prompt: string, context: string, withSearch: boolean) => {
     const fullPrompt = `You are a world-class software architect and principal engineer, an expert in complex algorithms and system design. Your mission is to generate, refactor, or optimize code to solve sophisticated algorithmic challenges.
 Internally, you must deconstruct the problem, think step-by-step, consider various data structures, analyze time and space complexity, and anticipate edge cases to architect the most robust and performant solution.
 
@@ -48,12 +33,19 @@ ${context}
 
 Produce only the final, complete, and production-ready code block as your response. Do not include any explanations, markdown formatting, or other text outside of the code.
 `;
+    // FIX: Use a flexible type for config to allow dynamic property assignment.
+    const config: any = {
+        thinkingConfig: { thinkingBudget: 32768 },
+    };
+
+    if (withSearch) {
+        config.tools = [{ googleSearch: {} }];
+    }
+
     return ai.models.generateContentStream({
         model: 'gemini-2.5-pro',
         contents: fullPrompt,
-        config: {
-            thinkingConfig: { thinkingBudget: 32768 },
-        },
+        config: config,
     });
 };
 

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import type { Persona } from '../types';
 import type { AiMode } from '../App';
@@ -12,6 +11,7 @@ interface PromptModalProps {
         snippet: string;
         mode: AiMode;
         selectedAgents: string[];
+        useSearch: boolean;
     }) => void;
     personas: Persona[];
     initialState: { prompt: string; mode: AiMode; snippet?: string } | null;
@@ -82,11 +82,16 @@ const typeToClassMap: Record<string, string> = {
     tag: 'text-pink-400 font-semibold',
     'attr-name': 'text-sky-300',
     'attr-value': 'text-lime-400',
+    color: 'text-fuchsia-400 font-semibold',
     property: 'text-sky-300',
     selector: 'text-amber-500',
     key: 'text-sky-300',
     boolean: 'text-pink-400',
     null: 'text-purple-400',
+    // New types for better highlighting
+    meta: 'text-cyan-400', // for doctype, processing instructions, etc.
+    variable: 'text-teal-300', // for PHP variables
+    'at-rule': 'text-purple-400', // for CSS @rules
     unknown: 'text-slate-300',
     error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
 };
@@ -98,21 +103,23 @@ const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?
         { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
         { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
         { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'string', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, // Regex
         { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
         {
             type: 'keyword',
-            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete)\b/,
+            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
         },
         { type: 'boolean', regex: /^\b(true|false)\b/ },
         { type: 'null', regex: /^\b(null|undefined)\b/ },
         { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
         { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'op', regex: /^==|===|!=|!==|<=|>=|=>|[-+*/%=<>!&|^~?:.,;]/ },
+        { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ },
         { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
         { type: 'whitespace', regex: /^\s+/ },
     ],
     html: [
         { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
+        { type: 'meta', regex: /^<!DOCTYPE[\s\S]*?>/i },
         { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
         { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
         { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
@@ -127,12 +134,78 @@ const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?
         { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
         { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: 'Unterminated comment block.' },
         { type: 'comment', regex: /^\/\*[\s\S]*?\*\// },
+        { type: 'at-rule', regex: /^@[\w\-]+/ },
         { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\])(?:\s*[:>+~]\s*)?/ },
         { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ },
-        { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s)?\b/i },
-        { type: 'op', regex: /^[:;,#.]/ },
+        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ },
+        { type: 'function', regex: /^\b(?:url|var|calc|rgb|rgba|hsl|hsla)(?=\()/ },
+        { type: 'color', regex: /^#(?:[0-9a-fA-F]{3,8})\b/ },
+        { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s|deg|fr|ms)?\b/i },
+        {
+            type: 'keyword',
+            regex: /^\b(!important|auto|inherit|initial|unset|none|block|inline|inline-block|flex|grid|absolute|relative|fixed|static|sticky|solid|dashed|dotted|hidden|visible|scroll|uppercase|lowercase|capitalize|center|left|right|justify|start|end|bold|normal|italic)\b/i,
+        },
+        { type: 'op', regex: /^[:;,>+~]/ },
         { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    xml: [
+        { type: 'error', regex: /^<[\w\d\-:]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed XML tag.' },
+        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
+        { type: 'meta', regex: /^<\?[\s\S]*?\?>/ },
+        { type: 'meta', regex: /^<!\[CDATA\[[\s\S]*?\]\]>/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-:]+/ },
+        { type: 'attr-name', regex: /^\s+[\w\d\-:]+(?==)/ },
+        { type: 'op', regex: /^=/ },
+        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'tag', regex: /^\/?>/ },
+        { type: 'text', regex: /^[^<]+/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    php: [
+        // This combines PHP and HTML. Order is crucial.
+        // 1. PHP-specific syntax first.
+        { type: 'meta', regex: /^<\?php|^\?>|<\?=/ },
+        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/ },
+        { type: 'variable', regex: /^\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*/ },
+        { type: 'string', regex: /^"(?:\\.|[^"\\])*"|^'(?:\\.|[^'\\])*'/ },
+        { type: 'number', regex: /^\b\d+(\.\d+)?(?:e[+-]?\d+)?\b/i },
+        {
+            type: 'keyword',
+            regex: /^\b(?:echo|if|else|elseif|while|for|foreach|function|return|const|class|new|public|protected|private|static|__halt_compiler|abstract|and|array|as|break|callable|case|catch|clone|continue|declare|default|die|do|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|finally|global|goto|implements|include|include_once|instanceof|insteadof|interface|isset|list|namespace|or|print|require|require_once|switch|throw|trait|try|unset|use|var|xor|yield|__CLASS__|__DIR__|__FILE__|__FUNCTION__|__LINE__|__METHOD__|__NAMESPACE__|__TRAIT__)\b/i,
+        },
+        { type: 'boolean', regex: /^\b(true|false)\b/i },
+        { type: 'null', regex: /^\bnull\b/i },
+        { type: 'function', regex: /^\b[a-zA-Z_][\w_]*(?=\s*\()/ },
+        { type: 'op', regex: /^->|=>|==|===|!=|!==|<=|>=|[-+*\/%<>&|^~?:.,;]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+
+        // 2. HTML syntax.
+        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
+        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
+        { type: 'op', regex: /^=/ },
+        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'tag', regex: /^>/ },
+
+        // 3. Generic text and whitespace.
+        { type: 'text', regex: /^[^<>$]+/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    sql: [
+        { type: 'comment', regex: /^(--[^\n]*|\/\*[\s\S]*?\*\/)/ },
+        { type: 'string', regex: /^'(?:[^']|'')*'/ }, // SQL strings use '' to escape '
+        { type: 'number', regex: /^\b-?\d+(\.\d+)?\b/ },
+        {
+            type: 'keyword',
+            regex: /^\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DATABASE|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP\sBY|ORDER\sBY|ASC|DESC|LIMIT|OFFSET|HAVING|AS|DISTINCT|COUNT|SUM|AVG|MAX|MIN|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|IN|LIKE|BETWEEN|IS|NULL|PRIMARY|KEY|FOREIGN|REFERENCES|UNIQUE|INDEX|VIEW)\b/i,
+        },
+        { type: 'boolean', regex: /^\b(TRUE|FALSE)\b/i},
+        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/i },
+        { type: 'id', regex: /^`[^`]*`|"[^"]*"/ }, // Quoted identifiers
+        { type: 'op', regex: /^[,;*<>=!%|&^~.\-+/]+/ },
+        { type: 'bracket', regex: /^[()]/ },
+        { type: 'id', regex: /^\b[a-zA-Z_]\w*\b/ },
         { type: 'whitespace', regex: /^\s+/ },
     ],
     json: [
@@ -150,15 +223,36 @@ const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?
         { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
         { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
         { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^']*'|"[^"]*")/ },
+        { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ },
         {
             type: 'keyword',
-            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|with|lambda|yield|in|is|not|and|or|pass|continue|break)\b/,
+            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/,
         },
+        { type: 'boolean', regex: /^\b(True|False)\b/ },
+        { type: 'null', regex: /^\b(None)\b/ },
         { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
+        { type: 'meta', regex: /^@\w+/ }, // Decorators
         { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
         { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
         { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'whitespace', regex: /^\s+/ },
+    ],
+    bash: [
+        { type: 'comment', regex: /^#[^\n]*/ },
+        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { 
+            type: 'keyword', 
+            regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/ 
+        },
+        {
+            type: 'function', // built-ins
+            regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/
+        },
+        { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ },
+        { type: 'variable', regex: /^\$\{[^}]*\}/ },
+        { type: 'number', regex: /^\b\d+\b/ },
+        { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ },
+        { type: 'bracket', regex: /^[()]/ },
         { type: 'whitespace', regex: /^\s+/ },
     ],
 };
@@ -233,6 +327,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
     const [snippet, setSnippet] = useState('');
     const [mode, setMode] = useState<AiMode>('ai');
     const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+    const [useSearch, setUseSearch] = useState(false);
 
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -242,6 +337,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
             setContext('');
             setSnippet('');
             setSelectedAgents([]);
+            setUseSearch(false);
 
             // Set initial state from props
             if (initialState) {
@@ -269,7 +365,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
 
     const handleSubmit = () => {
         if (isSubmitDisabled) return;
-        onSubmit({ prompt, context, snippet, mode, selectedAgents });
+        onSubmit({ prompt, context, snippet, mode, selectedAgents, useSearch });
     };
 
     if (!isOpen) return null;
@@ -297,10 +393,30 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                         <ModeButton active={mode === 'orchestrator'} onClick={() => setMode('orchestrator')}>
                             Multi-Agent Consensus
                         </ModeButton>
-                        <ModeButton active={mode === 'search'} onClick={() => setMode('search')}>
-                            Grounded Search
-                        </ModeButton>
                     </div>
+
+                    {mode === 'ai' && (
+                        <div className="pt-2">
+                            <label
+                                htmlFor="useSearch"
+                                className="flex items-center gap-3 text-sm text-[#f0f0e0] cursor-pointer"
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="useSearch"
+                                    checked={useSearch}
+                                    onChange={(e) => setUseSearch(e.target.checked)}
+                                    className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                />
+                                <div>
+                                    <span className="font-bold">Enable Search Grounding</span>
+                                    <span className="text-xs text-gray-400 font-normal block">
+                                        For up-to-date information from Google Search.
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                    )}
 
                     <div>
                         <label htmlFor="prompt" className="block text-sm font-bold text-[#f0f0e0] mb-2">
@@ -312,7 +428,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={
-                                mode === 'search'
+                                useSearch
                                     ? 'Ask a question for real-time search...'
                                     : mode === 'orchestrator'
                                     ? 'Describe the task for the agent collective...'

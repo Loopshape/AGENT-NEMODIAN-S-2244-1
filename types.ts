@@ -61,3 +61,8 @@ export interface Persona {
     name: string;
     description: string;
 }
+
+export interface TerminalLine {
+    type: 'input' | 'output' | 'error' | 'system' | 'help';
+    content: string;
+}

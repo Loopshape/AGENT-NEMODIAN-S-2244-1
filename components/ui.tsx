@@ -1,13 +1,14 @@
 
-import React, { useState } from 'react';
-import type { OrchestratorSettings, EditorStats } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import type { OrchestratorSettings, EditorStats, TerminalLine } from '../types';
 
 interface HeaderProps {
     onToggleLeftPanel: () => void;
     onOpenFile: () => void;
     onSaveFile: () => void;
     onSaveAs: () => void;
-    onRenderHTML: () => void;
+    onTogglePreview: () => void;
+    isPreviewing: boolean;
     onRunAI: () => void;
     onRunOrchestrator: () => void;
 }
@@ -20,7 +21,8 @@ interface HeaderProps {
  * @param {() => void} props.onOpenFile - Opens a file from the user's disk.
  * @param {() => void} props.onSaveFile - Saves the current editor content.
  * @param {() => void} props.onSaveAs - Saves the current editor content with a new name.
- * @param {() => void} props.onRenderHTML - Opens a preview panel for HTML content.
+ * @param {() => void} props.onTogglePreview - Toggles the live HTML preview panel.
+ * @param {boolean} props.isPreviewing - Indicates if the live preview is active.
  * @param {() => void} props.onRunAI - Opens the prompt modal for a single Quantum AI run.
  * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
  * @returns {React.ReactElement} The rendered header component.
@@ -57,10 +59,14 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 Save As
             </button>
             <button
-                onClick={props.onRenderHTML}
-                className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
+                onClick={props.onTogglePreview}
+                className={`text-xs px-2 py-1.5 rounded transition-colors ${
+                    props.isPreviewing
+                        ? 'bg-yellow-600 text-white hover:bg-yellow-700 ring-2 ring-offset-2 ring-offset-[#2e3026] ring-yellow-400'
+                        : 'bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400'
+                }`}
             >
-                Render HTML
+                {props.isPreviewing ? 'Close Preview' : 'Live Preview'}
             </button>
             <button
                 onClick={props.onRunAI}
@@ -303,6 +309,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
 interface FooterProps {
     onInvoke: () => void;
     isLoading: boolean;
+    onToggleTerminal: () => void;
 }
 
 /**
@@ -310,10 +317,12 @@ interface FooterProps {
  * @param {FooterProps} props - The component props.
  * @param {() => void} props.onInvoke - Function to call when the invoke button is clicked.
  * @param {boolean} props.isLoading - Indicates if an AI process is currently running, disabling the button.
+ * @param {() => void} props.onToggleTerminal - Function to toggle the terminal visibility.
  * @returns {React.ReactElement} The rendered footer component.
  */
 export const Footer: React.FC<FooterProps> = (props) => (
-    <footer className="grid-in-footer flex items-center justify-center px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
+    <footer className="grid-in-footer flex items-center justify-between px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
+        <div />
         <button
             onClick={props.onInvoke}
             className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2.5 rounded transition-colors disabled:bg-gray-500 text-lg quantum-pulse"
@@ -321,45 +330,333 @@ export const Footer: React.FC<FooterProps> = (props) => (
         >
             {props.isLoading ? 'Processing...' : 'Invoke Quantum AI...'}
         </button>
+        <button
+            onClick={props.onToggleTerminal}
+            className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded transition-colors"
+        >
+            Terminal
+        </button>
     </footer>
 );
 
 interface PreviewPanelProps {
-    isOpen: boolean;
     htmlContent: string;
     onClose: () => void;
 }
 
 /**
- * Renders a modal panel to preview HTML content in an iframe.
- * The content is sandboxed and loaded from a Blob URL for security.
+ * Renders a panel to show a live preview of HTML content.
+ * The content is sandboxed and loaded via the `srcDoc` attribute for security and live updates.
  * @param {PreviewPanelProps} props - The component props.
- * @param {boolean} props.isOpen - Controls whether the preview panel is visible.
  * @param {string} props.htmlContent - The HTML string to be rendered in the iframe.
  * @param {() => void} props.onClose - Callback to close the preview panel.
- * @returns {React.ReactElement | null} The rendered preview panel or null if not open.
+ * @returns {React.ReactElement} The rendered preview panel.
  */
-export const PreviewPanel: React.FC<PreviewPanelProps> = ({ isOpen, htmlContent, onClose }) => {
-    if (!isOpen) return null;
+export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose }) => {
+    return (
+        <div className="flex flex-col flex-1 bg-white border-l-2 border-[#22241e] min-w-[300px]">
+            <div className="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a] flex-shrink-0">
+                <span>Live Preview</span>
+                <button
+                    onClick={onClose}
+                    className="text-xl leading-none text-gray-400 hover:text-white transition-colors"
+                >
+                    &times;
+                </button>
+            </div>
+            <iframe
+                srcDoc={htmlContent}
+                title="Preview"
+                className="w-full h-full border-none"
+                sandbox="allow-scripts"
+            ></iframe>
+        </div>
+    );
+};
 
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
+interface TerminalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    history: TerminalLine[];
+    onSubmit: (command: string) => void;
+}
+
+// --- START: Terminal Syntax Highlighter Logic ---
+const typeToClassMap: Record<string, string> = {
+    comment: 'text-slate-500 italic',
+    string: 'text-lime-400',
+    number: 'text-amber-500 font-semibold',
+    keyword: 'text-pink-400 font-semibold',
+    type: 'text-sky-300',
+    function: 'text-[#4ac94a]',
+    bracket: 'text-purple-400 font-bold',
+    op: 'text-slate-400',
+    id: 'text-slate-300',
+    tag: 'text-pink-400 font-semibold',
+    'attr-name': 'text-sky-300',
+    'attr-value': 'text-lime-400',
+    color: 'text-fuchsia-400 font-semibold',
+    property: 'text-sky-300',
+    selector: 'text-amber-500',
+    key: 'text-sky-300',
+    boolean: 'text-pink-400',
+    null: 'text-purple-400',
+    meta: 'text-cyan-400',
+    variable: 'text-teal-300',
+    'at-rule': 'text-purple-400',
+    unknown: 'text-slate-300',
+    error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
+};
+
+const languageRules: Record<string, { type: string; regex: RegExp }[]> = {
+    js: [
+        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
+        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
+        {
+            type: 'keyword',
+            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
+        },
+        { type: 'boolean', regex: /^\b(true|false)\b/ },
+        { type: 'null', regex: /^\b(null|undefined)\b/ },
+        { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+        { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ },
+        { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
+    ],
+    py: [
+        { type: 'comment', regex: /^#[^\n]*/ },
+        { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ },
+        {
+            type: 'keyword',
+            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/,
+        },
+        { type: 'boolean', regex: /^\b(True|False)\b/ },
+        { type: 'null', regex: /^\b(None)\b/ },
+        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
+        { type: 'meta', regex: /^@\w+/ },
+        { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
+        { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+    ],
+    bash: [
+        { type: 'comment', regex: /^#[^\n]*/ },
+        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        {
+            type: 'keyword',
+            regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/,
+        },
+        {
+            type: 'function', // built-ins
+            regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/,
+        },
+        { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ },
+        { type: 'variable', regex: /^\$\{[^}]*\}/ },
+        { type: 'number', regex: /^\b\d+\b/ },
+        { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ },
+        { type: 'bracket', regex: /^[()]/ },
+    ],
+    json: [
+        { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
+        { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
+        { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
+        { type: 'keyword', regex: /^\b(true|false|null)\b/ },
+        { type: 'op', regex: /^[:,]/ },
+        { type: 'bracket', regex: /^[\[\]{}()]/ },
+    ],
+    // Add other languages as needed
+};
+
+const tokenize = (text: string, language: string): { type: string; value: string }[] => {
+    const rules = languageRules[language] || [];
+    if (rules.length === 0) {
+        return [{ type: 'unknown', value: text }];
+    }
+
+    const tokens: { type: string; value: string }[] = [];
+    let position = 0;
+
+    while (position < text.length) {
+        let matched = false;
+        for (const rule of rules) {
+            const match = rule.regex.exec(text.slice(position));
+            if (match && match[0].length > 0) {
+                tokens.push({ type: rule.type, value: match[0] });
+                position += match[0].length;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            tokens.push({ type: 'unknown', value: text[position] });
+            position++;
+        }
+    }
+    return tokens;
+};
+
+const escapeHtml = (str: string) => {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+};
+
+const highlight = (text: string, language: string): string => {
+    if (!text) return '';
+    const tokens = tokenize(text, language);
+    return tokens
+        .map((token) => {
+            const className = typeToClassMap[token.type] || typeToClassMap['unknown'];
+            return `<span class="${className}">${escapeHtml(token.value)}</span>`;
+        })
+        .join('');
+};
+
+const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => {
+    const codeBlockRegex = /```(\w+)?\n([\s\S]+?)```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push({ type: 'text', content: content.substring(lastIndex, match.index) });
+        }
+        const language = match[1] || 'plaintext';
+        const code = match[2];
+        parts.push({ type: 'code', language, content: code });
+        lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    if (lastIndex < content.length) {
+        parts.push({ type: 'text', content: content.substring(lastIndex) });
+    }
+
+    if (parts.length === 0) {
+        parts.push({ type: 'text', content });
+    }
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="w-[80%] h-[80%] bg-white border-2 border-[#4ac94a] rounded-md flex flex-col shadow-2xl">
-                <div className="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a]">
-                    <span>Quantum Preview</span>
-                    <button onClick={onClose} className="text-xl leading-none">
+        <>
+            {parts.map((part, index) => {
+                if (part.type === 'code') {
+                    return (
+                        <pre key={index} className="bg-black/30 rounded p-2 my-1 overflow-x-auto text-xs">
+                            <code dangerouslySetInnerHTML={{ __html: highlight(part.content, part.language) }} />
+                        </pre>
+                    );
+                }
+                return <span key={index}>{part.content}</span>;
+            })}
+        </>
+    );
+};
+// --- END: Terminal Syntax Highlighter Logic ---
+
+/**
+ * Renders a slide-up terminal interface for executing AI commands.
+ * @param {TerminalProps} props - The component props.
+ * @returns {React.ReactElement} The rendered terminal component.
+ */
+export const Terminal: React.FC<TerminalProps> = ({ isOpen, onClose, history, onSubmit }) => {
+    const [input, setInput] = useState('');
+    const [commandHistory, setCommandHistory] = useState<string[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+    const endOfHistoryRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        endOfHistoryRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [history]);
+
+    useEffect(() => {
+        if (isOpen) {
+            inputRef.current?.focus();
+        }
+    }, [isOpen]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (input.trim()) {
+            onSubmit(input.trim());
+            setCommandHistory((prev) => [input.trim(), ...prev]);
+            setHistoryIndex(-1);
+            setInput('');
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex < commandHistory.length - 1) {
+                const newIndex = historyIndex + 1;
+                setHistoryIndex(newIndex);
+                setInput(commandHistory[newIndex]);
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                const newIndex = historyIndex - 1;
+                setHistoryIndex(newIndex);
+                setInput(commandHistory[newIndex]);
+            } else {
+                setHistoryIndex(-1);
+                setInput('');
+            }
+        }
+    };
+
+    const lineTypeStyles = {
+        input: 'text-cyan-400',
+        output: 'text-slate-300 whitespace-pre-wrap',
+        error: 'text-red-500',
+        system: 'text-yellow-500',
+        help: 'text-slate-400 whitespace-pre-wrap',
+    };
+
+    return (
+        <div
+            className={`fixed bottom-0 left-0 right-0 h-1/2 bg-[#22241e]/95 backdrop-blur-md border-t-2 border-[#4ac94a] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+                isOpen ? 'translate-y-0' : 'translate-y-full'
+            }`}
+        >
+            <div className="flex flex-col h-full">
+                <div className="p-2 flex justify-between items-center border-b border-gray-700 flex-shrink-0">
+                    <h3 className="font-bold text-sm text-[#f0f0e0]">Quantum Terminal</h3>
+                    <button onClick={onClose} className="text-xl text-gray-500 hover:text-white">
                         &times;
                     </button>
                 </div>
-                <iframe
-                    src={url}
-                    title="Preview"
-                    className="w-full h-full border-none"
-                    onLoad={() => URL.revokeObjectURL(url)}
-                ></iframe>
+                <div className="flex-1 overflow-y-auto p-3 text-sm font-mono" onClick={() => inputRef.current?.focus()}>
+                    {history.map((line, i) => (
+                        <div key={i} className="flex gap-2">
+                            <span className="text-gray-600 select-none">
+                                {line.type === 'input' ? 'QF>' : '...'}
+                            </span>
+                            <div className={`${lineTypeStyles[line.type]}`}>
+                                {line.type === 'output' ? (
+                                    <FormattedTerminalOutput content={line.content} />
+                                ) : (
+                                    line.content
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    <div ref={endOfHistoryRef} />
+                </div>
+                <form onSubmit={handleSubmit} className="p-2 border-t border-gray-700 flex-shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-cyan-400 font-mono text-sm select-none">QF&gt;</span>
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-full bg-transparent text-slate-300 font-mono text-sm focus:outline-none"
+                            placeholder="Type a command..."
+                            spellCheck="false"
+                        />
+                    </div>
+                </form>
             </div>
         </div>
     );

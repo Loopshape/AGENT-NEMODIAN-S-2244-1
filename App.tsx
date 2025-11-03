@@ -1,15 +1,20 @@
 import React, { useState, useCallback } from 'react';
-import type { Agent, AgentName, AiState, EditorStats, OrchestratorSettings, Consensus, Persona } from './types';
-import { Header, StatusBar, LeftPanel, Footer, PreviewPanel } from './components/ui';
+import type {
+    Agent,
+    AgentName,
+    AiState,
+    EditorStats,
+    OrchestratorSettings,
+    Consensus,
+    Persona,
+    GroundingChunk,
+    TerminalLine,
+} from './types';
+import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './components/ui';
 import { Editor } from './components/Editor';
 import { AiResponsePanel } from './components/AiPanels';
 import { PromptModal } from './components/PromptModal';
-import {
-    generateWithThinkingStream,
-    runMultiAgentConsensus,
-    generateWithSearch,
-    personas,
-} from './services/geminiService';
+import { generateWithThinkingStream, runMultiAgentConsensus, personas } from './services/geminiService';
 
 const INITIAL_CONTENT = `<!DOCTYPE html>
 <html lang="en">
@@ -70,7 +75,7 @@ const initialAgentState: Agent[] = [
     },
 ];
 
-export type AiMode = 'ai' | 'orchestrator' | 'search';
+export type AiMode = 'ai' | 'orchestrator';
 
 /**
  * Determines the syntax highlighting language based on a file extension.
@@ -90,11 +95,26 @@ const getLanguageFromExtension = (extension: string): string => {
         less: 'css',
         html: 'html',
         htm: 'html',
+        xml: 'xml',
+        php: 'php',
+        sql: 'sql',
         json: 'json',
         py: 'py',
+        sh: 'bash',
+        bash: 'bash',
     };
     return langMap[extension.toLowerCase()] || 'plaintext';
 };
+
+const HELP_TEXT = `Quantum Fractal AI Terminal Commands:
+- run <prompt> [--search]: Executes a Quantum AI task. Use quotes for multi-word prompts.
+    --search: Enables Google Search grounding for up-to-date information.
+- orch <prompt> --agents <agent1>,<agent2>,...: Runs a Multi-Agent Consensus task.
+    --agents: A comma-separated list of agent personas to use (e.g., "Performance Optimizer,Code Readability Advocate").
+- apply: Applies the last generated code from the terminal to the editor.
+- clear: Clears the terminal history.
+- help: Displays this help message.
+`;
 
 /**
  * The main application component. It orchestrates the entire UI and state management,
@@ -110,6 +130,7 @@ const App: React.FC = () => {
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+    const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
     const [initialModalState, setInitialModalState] = useState<{
         prompt: string;
@@ -132,8 +153,12 @@ const App: React.FC = () => {
         agentCount: 4,
         maxRounds: 3,
     });
-    const [editorFontSize, setEditorFontSize] = useState<number>(14);
+    const [editorFontSize, setEditorFontSize] = useState<number>(9);
     const [originalCodeForDiff, setOriginalCodeForDiff] = useState<string>('');
+    const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([
+        { type: 'system', content: 'Quantum Fractal AI Terminal Initialized. Type "help" for commands.' },
+    ]);
+    const [lastTerminalResult, setLastTerminalResult] = useState<string | null>(null);
 
     const updateAgent = (name: AgentName, newStatus: Partial<Agent>) => {
         setAiState((prev) => ({
@@ -173,12 +198,14 @@ const App: React.FC = () => {
             snippet,
             mode,
             selectedAgents,
+            useSearch,
         }: {
             prompt: string;
             context: string;
             snippet: string;
             mode: AiMode;
             selectedAgents: string[];
+            useSearch: boolean;
         }) => {
             setIsPromptModalOpen(false);
             if (aiState.isLoading) return;
@@ -215,34 +242,47 @@ const App: React.FC = () => {
                     } else {
                         updateAgent('echo', { status: 'error', content: 'Consensus failed. No candidates generated.' });
                     }
-                } else if (mode === 'search') {
-                    updateAgent('nexus', { status: 'working', content: 'Initiating grounded quantum query...' });
-                    await new Promise((r) => setTimeout(r, 200));
-                    updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
-
-                    const response = await generateWithSearch(currentPrompt);
-
-                    await new Promise((r) => setTimeout(r, 200));
-                    updateAgent('relay', { status: 'done' });
-                    updateAgent('cognito', { status: 'working', content: 'Analyzing grounded information...' });
-
-                    const code = response.text.trim();
-                    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? null;
-
-                    setAiState((prev) => ({ ...prev, generatedCode: code, groundingChunks: chunks as any[] }));
-
-                    await new Promise((r) => setTimeout(r, 200));
-                    updateAgent('cognito', { status: 'done', content: 'Analysis complete.' });
-                    updateAgent('echo', { status: 'done', content: 'Grounded Quantum Solution Generated.' });
                 } else {
                     // single AI mode
-                    const stream = await runAgentFlow(() => generateWithThinkingStream(currentPrompt, fullContext));
+                    if (useSearch) {
+                        updateAgent('nexus', { status: 'working', content: 'Initiating grounded quantum query...' });
+                        await new Promise((r) => setTimeout(r, 200));
+                        updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
+                    }
+                    const stream = await runAgentFlow(() =>
+                        generateWithThinkingStream(currentPrompt, fullContext, useSearch)
+                    );
                     let code = '';
+                    let allGroundingChunks: GroundingChunk[] = [];
+
                     for await (const chunk of stream) {
                         code += chunk.text;
-                        setAiState((prev) => ({ ...prev, generatedCode: code }));
+                        const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+                        if (newChunks) {
+                            newChunks.forEach((newChunk: GroundingChunk) => {
+                                if (!allGroundingChunks.some((existing) => existing.web?.uri === newChunk.web?.uri)) {
+                                    allGroundingChunks.push(newChunk);
+                                }
+                            });
+                        }
+                        setAiState((prev) => ({
+                            ...prev,
+                            generatedCode: code,
+                            groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : null,
+                        }));
                     }
-                    updateAgent('echo', { status: 'done', content: 'Quantum Fractal Solution Generated.' });
+
+                    if (useSearch) {
+                        await new Promise((r) => setTimeout(r, 200));
+                        updateAgent('relay', { status: 'done' });
+                        updateAgent('cognito', { status: 'working', content: 'Analyzing grounded information...' });
+                        await new Promise((r) => setTimeout(r, 200));
+                        updateAgent('cognito', { status: 'done', content: 'Analysis complete.' });
+                    }
+                    updateAgent('echo', {
+                        status: 'done',
+                        content: useSearch ? 'Grounded Quantum Solution Generated.' : 'Quantum Fractal Solution Generated.',
+                    });
                 }
             } catch (error) {
                 console.error('Gemini API Error:', error);
@@ -266,6 +306,92 @@ const App: React.FC = () => {
         },
         [history, historyIndex]
     );
+
+    const handleCommandSubmit = async (command: string) => {
+        const addToHistory = (type: TerminalLine['type'], content: string) => {
+            setTerminalHistory((prev) => [...prev, { type, content }]);
+        };
+
+        addToHistory('input', command);
+
+        const parts = command.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+        const [cmd, ...args] = parts;
+
+        const getArgValue = (flag: string): string | undefined => {
+            const index = args.findIndex((arg) => arg === flag);
+            if (index !== -1 && args[index + 1]) {
+                return args[index + 1].replace(/"/g, '');
+            }
+            return undefined;
+        };
+
+        switch (cmd) {
+            case 'help':
+                addToHistory('help', HELP_TEXT);
+                break;
+            case 'clear':
+                setTerminalHistory([]);
+                break;
+            case 'apply':
+                if (lastTerminalResult) {
+                    handleSetContent(lastTerminalResult);
+                    addToHistory('system', 'Applied last AI result to the editor.');
+                    setLastTerminalResult(null);
+                } else {
+                    addToHistory('error', 'No previous AI result to apply.');
+                }
+                break;
+            case 'run': {
+                const prompt = args.find((arg) => !arg.startsWith('--'))?.replace(/"/g, '') || 'Analyze the code.';
+                const useSearch = args.includes('--search');
+                addToHistory('system', 'Invoking Quantum AI...');
+                try {
+                    const stream = await generateWithThinkingStream(prompt, editorContent, useSearch);
+                    let result = '';
+                    for await (const chunk of stream) {
+                        result += chunk.text;
+                    }
+                    setLastTerminalResult(result);
+                    addToHistory('output', result);
+                } catch (e) {
+                    addToHistory('error', `Error: ${(e as Error).message}`);
+                }
+                break;
+            }
+            case 'orch': {
+                const prompt = args.find((arg) => !arg.startsWith('--'))?.replace(/"/g, '') || 'Refactor the code.';
+                const agentsStr = getArgValue('--agents');
+                if (!agentsStr) {
+                    addToHistory('error', 'The --agents flag is required for "orch" command.');
+                    break;
+                }
+                const selectedAgents = agentsStr.split(',').map((s) => s.trim());
+                if (selectedAgents.length < 2) {
+                    addToHistory('error', 'Please provide at least two agents for consensus.');
+                    break;
+                }
+                addToHistory('system', `Invoking Multi-Agent Consensus with: ${selectedAgents.join(', ')}`);
+                try {
+                    const candidates = await runMultiAgentConsensus(prompt, editorContent, selectedAgents);
+                    if (candidates.length > 0) {
+                        const topCandidate = candidates[0];
+                        setLastTerminalResult(topCandidate.content);
+                        const resultText = `Consensus complete. Top candidate score: ${topCandidate.score.toFixed(
+                            2
+                        )}\n\n${topCandidate.content}`;
+                        addToHistory('output', resultText);
+                    } else {
+                        addToHistory('error', 'Consensus failed to produce any candidates.');
+                    }
+                } catch (e) {
+                    addToHistory('error', `Error: ${(e as Error).message}`);
+                }
+                break;
+            }
+            default:
+                addToHistory('error', `Command not found: "${cmd}". Type "help" for a list of commands.`);
+        }
+    };
 
     const handleUndo = () => {
         if (historyIndex > 0) {
@@ -327,7 +453,7 @@ const App: React.FC = () => {
         });
 
         try {
-            const stream = await runAgentFlow(() => generateWithThinkingStream(currentPrompt, fullContext));
+            const stream = await runAgentFlow(() => generateWithThinkingStream(currentPrompt, fullContext, false));
             let code = '';
             for await (const chunk of stream) {
                 code += chunk.text;
@@ -413,7 +539,7 @@ const App: React.FC = () => {
 
     return (
         <div
-            className="h-screen w-screen grid grid-rows-[max-content_max-content_1fr_max-content] grid-cols-1"
+            className="h-screen w-screen grid grid-rows-[max-content_max-content_1fr_max-content] grid-cols-1 relative overflow-hidden"
             style={{ gridTemplateAreas: '"header" "status" "main" "footer"' }}
         >
             <Header
@@ -421,7 +547,8 @@ const App: React.FC = () => {
                 onOpenFile={handleFileOpen}
                 onSaveFile={() => handleSaveFile()}
                 onSaveAs={() => handleSaveFile(true)}
-                onRenderHTML={() => setIsPreviewOpen(true)}
+                onTogglePreview={() => setIsPreviewOpen((p) => !p)}
+                isPreviewing={isPreviewOpen}
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
             />
@@ -444,16 +571,24 @@ const App: React.FC = () => {
                     onSaveDraft={handleSaveDraft}
                     onLoadDraft={handleLoadDraft}
                 />
-                <Editor
-                    content={editorContent}
-                    setContent={handleSetContent}
-                    fileType={fileType}
-                    onStatsChange={handleStatsChange}
-                    fontSize={editorFontSize}
-                />
+                <div className="flex flex-1 min-w-0">
+                    <Editor
+                        content={editorContent}
+                        setContent={handleSetContent}
+                        fileType={fileType}
+                        onStatsChange={handleStatsChange}
+                        fontSize={editorFontSize}
+                    />
+                    {isPreviewOpen && (
+                        <PreviewPanel htmlContent={editorContent} onClose={() => setIsPreviewOpen(false)} />
+                    )}
+                </div>
             </main>
-            <Footer onInvoke={() => openPromptModal('ai')} isLoading={aiState.isLoading} />
-            <PreviewPanel isOpen={isPreviewOpen} htmlContent={editorContent} onClose={() => setIsPreviewOpen(false)} />
+            <Footer
+                onInvoke={() => openPromptModal('ai')}
+                isLoading={aiState.isLoading}
+                onToggleTerminal={() => setIsTerminalOpen((p) => !p)}
+            />
             <AiResponsePanel
                 isOpen={isAiPanelOpen}
                 aiState={aiState}
@@ -468,6 +603,12 @@ const App: React.FC = () => {
                 onSubmit={handleModalSubmit}
                 personas={personas as Persona[]}
                 initialState={initialModalState}
+            />
+            <Terminal
+                isOpen={isTerminalOpen}
+                onClose={() => setIsTerminalOpen(false)}
+                history={terminalHistory}
+                onSubmit={handleCommandSubmit}
             />
         </div>
     );
