@@ -144,7 +144,7 @@ const FileTree: React.FC<FileExplorerProps & { node: FolderNode; path: string; d
 const FileTreeItem: React.FC<
     FileExplorerProps & { name: string; node: FileSystemNode; path: string; depth: number }
 > = ({ name, node, path, depth, onOpenFile, activePath, ...rest }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
     const [newName, setNewName] = useState(name);
     const renameInputRef = useRef<HTMLInputElement>(null);
@@ -194,7 +194,7 @@ const FileTreeItem: React.FC<
             >
                 <div className="flex items-center gap-1.5 truncate">
                     {isFolder ? (
-                        <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                        <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     ) : (
                         <span className="opacity-50">●</span>
                     )}
@@ -235,7 +235,8 @@ const FileTreeItem: React.FC<
                     </div>
                 )}
             </div>
-            {isFolder && isExpanded && <FileTree node={node as FolderNode} path={path} depth={depth + 1} {...rest} />}
+            {/* FIX: Pass `activePath` and `onOpenFile` to the recursive `FileTree` call. */}
+            {isFolder && isExpanded && <FileTree node={node as FolderNode} path={path} depth={depth + 1} {...rest} onOpenFile={onOpenFile} activePath={activePath} />}
         </div>
     );
 };
@@ -256,8 +257,8 @@ const Accordion: React.FC<{ title: string; children: React.ReactNode; defaultOpe
                 className="font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5"
             >
                 <span>{title}</span>
-                <span className="transition-transform duration-200" style={{ transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
-                    ▼
+                <span className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
+                    ▶
                 </span>
             </button>
             {isOpen && <div className="p-2 pt-0">{children}</div>}
