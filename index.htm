@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nemodian 2244-1 :: Quantum Fractal AI Editor (VanillaJS Edition)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Fira Code', monospace; }
+        .grid-container {
+            display: grid;
+            height: 100vh;
+            width: 100vw;
+            grid-template-rows: max-content max-content 1fr max-content;
+            grid-template-columns: auto 1fr;
+            grid-template-areas:
+                "header header"
+                "status status"
+                "main main"
+                "footer footer";
+        }
+        .main-content {
+            grid-area: main;
+            display: flex;
+            overflow: hidden;
+        }
+        @keyframes quantumScan { 0% { left: -100%; } 100% { left: 100%; } }
+        @keyframes quantumPulse { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 1; transform: scale(1.05); } }
+        @keyframes threadFlow { 0% { top: -100%; } 100% { top: 100%; } }
+        @keyframes quantumSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes quantumPulseDot { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.7; } }
+        @keyframes fractalPulse { 0% { transform: scale(1); opacity: 0.3; } 100% { transform: scale(1.5); opacity: 0.8; } }
+        @keyframes agentPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.01); } }
+        @keyframes titlePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        @keyframes agentIdle { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+        @keyframes agentError { 0%, 100% { transform: translateX(0); } 10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); } 20%, 40%, 60%, 80% { transform: translateX(2px); } }
+        .quantum-scan::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(187, 134, 252, 0.6), transparent); animation: quantumScan 3s infinite linear; }
+        .quantum-pulse { animation: quantumPulse 2s infinite alternate; }
+        .quantum-thread { animation: threadFlow 2s infinite linear; }
+        .quantum-spinner::before { animation: quantumSpin 1s linear infinite; }
+        .quantum-spinner::after { animation: quantumSpin 0.5s linear infinite; }
+        .quantum-dot::before { animation: quantumPulseDot 2s infinite; }
+        .fractal-node { animation: fractalPulse 1.5s infinite alternate; }
+        /* For vanilla JS show/hide */
+        .hidden { display: none !important; }
+        /* Custom scrollbar for a better aesthetic */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #22241e; }
+        ::-webkit-scrollbar-thumb { background: #4ac94a; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #5bc0de; }
+    </style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-[#3a3c31] text-[#f0f0e0] overflow-hidden">
+    <div id="app-root" class="grid-container">
+        <!-- Header -->
+        <header class="grid-in-header bg-[#2e3026] border-b border-[#22241e] flex items-center justify-between px-3 py-1.5 relative overflow-hidden quantum-scan">
+            <div class="flex gap-3 items-center z-10">
+                <button id="toggle-left-panel-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-sm px-2 py-1.5 rounded transition-colors">☰</button>
+                <div class="font-extrabold quantum-pulse">Nemodian 2244-1 :: Quantum Fractal AI</div>
+            </div>
+            <div class="flex gap-2 items-center z-10">
+                <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-[#4ac94a]"></div><div class="text-xs text-[#cfcfbd]">Quantum AI: Ready</div></div>
+                <button id="toggle-preview-btn" class="text-xs px-2 py-1.5 rounded transition-colors bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400">Live Preview</button>
+                <button id="run-ai-btn" class="bg-[#5bc0de] border-[#5bc0de] hover:bg-cyan-400 text-xs px-2 py-1.5 rounded transition-colors">Quantum AI</button>
+                <button id="run-orchestrator-btn" class="bg-[#4ac94a] border-[#4ac94a] hover:bg-green-400 text-xs px-2 py-1.5 rounded transition-colors">Orchestrator</button>
+            </div>
+        </header>
+
+        <!-- Status Bar -->
+        <div id="status-bar" class="grid-in-status bg-[#22241e] flex justify-between items-center px-3 text-xs h-[1.5em] relative">
+            <div class="absolute top-0 left-0 w-full h-full pointer-events-none opacity-30">
+                <!-- Decorative threads will be added by JS if needed, or keep static -->
+            </div>
+            <div id="status-filename">No File Open</div>
+            <div id="status-stats">Cursor: 1:1 | Lines: 1 | Chars: 0 | History: 1</div>
+        </div>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Left Panel -->
+            <aside id="left-panel" class="bg-[#313328] border-r border-[#22241e] flex flex-col w-60 transition-all duration-300 overflow-y-auto">
+                <!-- Accordion: File Explorer -->
+                <div class="text-xs text-[#999966] border-b border-[#22241e]">
+                    <button class="accordion-toggle font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5" data-target="file-explorer-content">
+                        <span>File Explorer</span><span class="transition-transform duration-200">▼</span>
+                    </button>
+                    <div id="file-explorer-content" class="p-2 pt-0"><div id="file-explorer-root"></div></div>
+                </div>
+                <!-- Accordion: Quantum Actions -->
+                <div class="text-xs text-[#999966] border-b border-[#22241e]">
+                     <button class="accordion-toggle font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5" data-target="actions-content">
+                        <span>Quantum Actions</span><span class="transition-transform duration-200 rotate-[-90deg]">▼</span>
+                    </button>
+                    <div id="actions-content" class="p-2 pt-0 hidden"><div class="flex flex-col gap-1 pt-1">
+                        <button id="undo-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">UNDO</button>
+                        <button id="redo-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">REDO</button>
+                        <button id="quick-optimize-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-2 p-1.5 rounded">Quantum Optimize</button>
+                        <button id="quick-document-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">Fractal Document</button>
+                        <button id="quick-refactor-btn" class="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">Hyper Refactor</button>
+                        <button id="code-review-btn" class="bg-[#a033a0] hover:bg-[#6c236c] text-white text-xs w-full text-left p-1.5 rounded">AI Code Review</button>
+                        <button id="analyze-selection-btn" class="bg-[#5bc0de] hover:bg-cyan-400 text-white text-xs w-full text-left p-1.5 rounded">Analyze Selection</button>
+                    </div></div>
+                </div>
+                <!-- Accordion: Local Drafts -->
+                 <div class="text-xs text-[#999966] border-b border-[#22241e]">
+                     <button class="accordion-toggle font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5" data-target="drafts-content">
+                        <span>Local Drafts</span><span class="transition-transform duration-200 rotate-[-90deg]">▼</span>
+                    </button>
+                    <div id="drafts-content" class="p-2 pt-0 hidden"><div class="flex flex-col gap-1 pt-1">
+                        <button id="save-draft-btn" class="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded">Save Draft</button>
+                        <button id="load-draft-btn" class="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded">Load Draft</button>
+                    </div></div>
+                </div>
+                <!-- Accordion: Editor Settings -->
+                 <div class="text-xs text-[#999966] border-b border-[#22241e]">
+                     <button class="accordion-toggle font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5" data-target="editor-settings-content">
+                        <span>Editor Settings</span><span class="transition-transform duration-200 rotate-[-90deg]">▼</span>
+                    </button>
+                    <div id="editor-settings-content" class="p-2 pt-0 hidden"><div class="pt-1">
+                        <div class="mt-1 flex items-center justify-between">
+                            <label for="font-size-input">Font Size (px):</label>
+                            <input type="number" id="font-size-input" min="8" max="24" value="11" class="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded" />
+                        </div>
+                    </div></div>
+                </div>
+                <!-- Accordion: Editor History -->
+                 <div class="text-xs text-[#999966] border-b border-[#22241e]">
+                     <button class="accordion-toggle font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5" data-target="history-content">
+                        <span>Editor History</span><span class="transition-transform duration-200 rotate-[-90deg]">▼</span>
+                    </button>
+                    <div id="history-content" class="p-2 pt-0 hidden">
+                        <div id="history-list" class="max-h-48 overflow-y-auto pr-1 border-l-2 border-gray-700 pl-2"></div>
+                    </div>
+                </div>
+            </aside>
+            <!-- Editor -->
+            <div id="editor-container" class="flex-1 flex relative bg-[#22241e] overflow-hidden">
+                <div id="editor-lines" class="text-right text-slate-600 select-none pr-3 pt-2 text-xs" style="line-height: 1.5em; font-size: 11px;"></div>
+                <div class="relative flex-1 h-full">
+                    <textarea id="editor-textarea" spellcheck="false" class="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal" style="line-height: 1.5em; font-size: 11px;" aria-label="Code Editor"></textarea>
+                    <pre class="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-hidden" style="line-height: 1.5em; font-size: 11px;" aria-hidden="true">
+                        <code id="editor-highlight"></code>
+                    </pre>
+                </div>
+            </div>
+        </main>
+        <!-- Footer -->
+        <footer class="grid-in-footer flex items-center justify-between px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
+            <div />
+            <button id="invoke-ai-footer-btn" class="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2.5 rounded transition-colors disabled:bg-gray-500 text-lg quantum-pulse">Invoke Quantum AI...</button>
+            <button id="toggle-terminal-btn" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded transition-colors">Terminal</button>
+        </footer>
+    </div>
+
+    <!-- AI Response Panel -->
+    <div id="ai-response-panel" class="hidden fixed bottom-20 right-5 w-[500px] max-h-[600px] bg-[#313328] border border-[#4ac94a] rounded-lg flex-col z-40 shadow-2xl overflow-hidden">
+        <div class="p-4 border-b border-gray-700 flex items-center gap-3 sticky top-0 bg-[#313328]/95 backdrop-blur-sm z-10">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg>
+            <input type="search" id="ai-filter-input" placeholder="Filter agents, code, or results..." class="w-full bg-transparent text-sm text-[#f0f0e0] placeholder-gray-500 focus:ring-0 outline-none border-none p-0" />
+            <button id="ai-panel-close-btn" class="text-[#999966] text-2xl hover:text-red-500 transition-colors">&times;</button>
+        </div>
+        <div id="ai-panel-content" class="overflow-y-auto p-4"></div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div id="prompt-modal" class="hidden fixed inset-0 bg-black/60 items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-2xl bg-[#313328] border border-[#4ac94a] rounded-lg shadow-2xl flex flex-col max-h-[90vh]">
+            <header class="p-4 border-b border-gray-700"><h2 class="text-lg font-bold text-[#f0f0e0] animation-title-pulse">Invoke Quantum AI</h2></header>
+            <div class="p-4 space-y-4 overflow-y-auto">
+                <div class="flex gap-2 items-center">
+                    <button type="button" id="modal-mode-ai" class="px-3 py-1.5 text-sm rounded transition-colors">Quantum AI</button>
+                    <button type="button" id="modal-mode-orchestrator" class="px-3 py-1.5 text-sm rounded transition-colors">Multi-Agent Consensus</button>
+                </div>
+                <div id="modal-search-option" class="pt-2 hidden">
+                    <label for="useSearch" class="flex items-center gap-3 text-sm text-[#f0f0e0] cursor-pointer">
+                        <input type="checkbox" id="useSearch" class="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]" />
+                        <div><span class="font-bold">Enable Search Grounding</span><span class="text-xs text-gray-400 font-normal block">For up-to-date information from Google Search.</span></div>
+                    </label>
+                </div>
+                <div>
+                    <label for="prompt-textarea" class="block text-sm font-bold text-[#f0f0e0] mb-2">Your Request</label>
+                    <textarea id="prompt-textarea" class="w-full h-24 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"></textarea>
+                </div>
+                <div id="modal-orchestrator-options" class="space-y-2 hidden">
+                    <h3 class="text-sm font-bold text-[#f0f0e0]">Select Specialist Agents (Consensus Group)</h3>
+                    <div id="modal-agent-list" class="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded bg-black/10 border border-white/10"></div>
+                    <p id="modal-agent-count-label" class="text-xs text-yellow-500 transition-colors">Select at least 2 agents. Currently selected: 0</p>
+                </div>
+                <div>
+                    <label for="snippet-textarea" class="block text-sm font-bold text-[#f0f0e0] mb-2">Paste a Code Snippet (optional)</label>
+                    <div class="relative">
+                        <textarea id="snippet-textarea" placeholder="Paste relevant code here..." class="w-full h-32 p-2 bg-[#22241e] text-transparent caret-white font-mono border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors" spellcheck="false"></textarea>
+                        <pre class="absolute top-0 left-0 w-full h-full p-2 font-mono pointer-events-none overflow-y-auto text-sm" aria-hidden="true"><code id="snippet-highlight"></code></pre>
+                    </div>
+                </div>
+                 <div>
+                    <label for="context-textarea" class="block text-sm font-bold text-[#f0f0e0] mb-2">Additional Context (optional)</label>
+                    <textarea id="context-textarea" placeholder="Provide any extra information, constraints, or requirements..." class="w-full h-20 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"></textarea>
+                </div>
+            </div>
+            <footer class="p-4 border-t border-gray-700 flex justify-end gap-2">
+                <button id="modal-cancel-btn" class="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors">Cancel</button>
+                <button id="modal-submit-btn" class="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2 rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed">Invoke AI</button>
+            </footer>
+        </div>
+    </div>
+    
+    <!-- Preview Panel -->
+    <div id="preview-panel" class="hidden fixed flex-col bg-white border-2 border-[#4ac94a] shadow-2xl rounded-lg overflow-hidden" style="z-index: 100;">
+        <div id="preview-panel-header" class="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a] flex-shrink-0 cursor-move">
+            <span class="font-bold">Live Preview</span>
+            <button id="preview-panel-close-btn" class="text-xl leading-none text-gray-400 hover:text-white transition-colors cursor-pointer">&times;</button>
+        </div>
+        <iframe id="preview-iframe" title="Preview" class="w-full h-full border-none" sandbox="allow-scripts"></iframe>
+        <div id="preview-panel-resizer" class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize" style="z-index: 101;"></div>
+    </div>
+
+    <!-- Terminal -->
+    <div id="terminal" class="fixed bottom-0 left-0 right-0 h-1/2 bg-[#22241e]/95 backdrop-blur-md border-t-2 border-[#4ac94a] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out translate-y-full">
+        <div class="flex flex-col h-full">
+            <div class="p-2 flex justify-between items-center border-b border-gray-700 flex-shrink-0">
+                <h3 class="font-bold text-sm text-[#f0f0e0]">Quantum Terminal</h3>
+                <button id="terminal-close-btn" class="text-xl text-gray-500 hover:text-white">&times;</button>
+            </div>
+            <div id="terminal-history" class="flex-1 overflow-y-auto p-3 text-sm font-mono"></div>
+            <form id="terminal-form" class="p-2 border-t border-gray-700 flex-shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-cyan-400 font-mono text-sm select-none">QF&gt;</span>
+                    <input id="terminal-input" type="text" class="w-full bg-transparent text-slate-300 font-mono text-sm focus:outline-none" placeholder="Type a command..." spellcheck="false" />
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script type="module">
+        import { GoogleGenAI, Type } from 'https://aistudiocdn.com/@google/genai@^1.28.0';
+
+        // --- STATE MANAGEMENT ---
+        const INITIAL_FILES = {
+            type: 'folder',
+            children: {
+                'index.html': { type: 'file', content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Quantum Fractal AI Project</title>\n    <link rel="stylesheet" href="css/style.css">\n</head>\n<body>\n    <h1>Welcome to Quantum Fractal AI</h1>\n    <p>Edit this project and see the live preview.</p>\n    <script src="js/main.js"></script>\n<script type="module" src="/index.tsx"></script>
+</body>\n</html>`},
+                'css': { type: 'folder', children: { 'style.css': { type: 'file', content: `body {\n    font-family: sans-serif;\n    background-color: #f0f0f0;\n    color: #333;\n    padding: 2rem;\n}` } } },
+                'js': { type: 'folder', children: { 'main.js': { type: 'file', content: `console.log('Quantum Fractal AI project loaded.');` } } }
+            }
+        };
+
+        const initialAgentState = [
+            { name: 'nexus', title: 'Nexus', subtitle: 'Quantum Orchestrator', content: 'Idle. Awaiting quantum command.', status: 'idle', color: '#BB86FC' },
+            { name: 'cognito', title: 'Cognito', subtitle: 'Fractal Analyzer', content: 'Ready', status: 'idle', color: '#03DAC6' },
+            { name: 'oracle', title: 'Oracle', subtitle: 'Specialist Collective', content: 'Standing by.', status: 'idle', color: '#F39C12' },
+            { name: 'relay', title: 'Relay', subtitle: 'Quantum Communicator', content: 'Ready', status: 'idle', color: '#FFD54F' },
+            { name: 'sentinel', title: 'Sentinel', subtitle: 'Quantum Monitor', content: 'Ready', status: 'idle', color: '#CF6679' },
+            { name: 'echo', title: 'Echo', subtitle: 'Quantum Reporter', content: 'Awaiting quantum report...', status: 'idle', color: '#4ac94a' }
+        ];
+
+        let state = {
+            fileSystem: INITIAL_FILES,
+            activeFilePath: '/index.html',
+            editorContent: INITIAL_FILES.children['index.html'].content,
+            fileName: 'index.html',
+            fileType: 'html',
+            isLeftPanelOpen: true,
+            isAiPanelOpen: false,
+            isPreviewOpen: false,
+            isPromptModalOpen: false,
+            isTerminalOpen: false,
+            history: [INITIAL_FILES.children['index.html'].content],
+            historyIndex: 0,
+            stats: { cursor: '1:0', lines: 1, chars: 0, history: 1 },
+            aiState: {
+                agents: JSON.parse(JSON.stringify(initialAgentState)),
+                isLoading: false,
+                consensus: null,
+                generatedCode: null,
+                groundingChunks: null,
+                codeReviewFindings: null,
+            },
+            editorFontSize: 11,
+            originalCodeForDiff: '',
+            terminalHistory: [{ type: 'system', content: 'Quantum Fractal AI Terminal Initialized. Type "help" for commands.' }],
+            lastTerminalResult: null
+        };
+        
+        // --- DOM ELEMENT REFERENCES ---
+        const DOMElements = {
+            // Main layout
+            leftPanel: document.getElementById('left-panel'),
+            // Header
+            toggleLeftPanelBtn: document.getElementById('toggle-left-panel-btn'),
+            togglePreviewBtn: document.getElementById('toggle-preview-btn'),
+            runAiBtn: document.getElementById('run-ai-btn'),
+            runOrchestratorBtn: document.getElementById('run-orchestrator-btn'),
+            // Status bar
+            statusBar: document.getElementById('status-bar'),
+            statusFilename: document.getElementById('status-filename'),
+            statusStats: document.getElementById('status-stats'),
+            // Left panel
+            fileExplorerRoot: document.getElementById('file-explorer-root'),
+            undoBtn: document.getElementById('undo-btn'),
+            redoBtn: document.getElementById('redo-btn'),
+            quickOptimizeBtn: document.getElementById('quick-optimize-btn'),
+            quickDocumentBtn: document.getElementById('quick-document-btn'),
+            quickRefactorBtn: document.getElementById('quick-refactor-btn'),
+            codeReviewBtn: document.getElementById('code-review-btn'),
+            analyzeSelectionBtn: document.getElementById('analyze-selection-btn'),
+            saveDraftBtn: document.getElementById('save-draft-btn'),
+            loadDraftBtn: document.getElementById('load-draft-btn'),
+            fontSizeInput: document.getElementById('font-size-input'),
+            historyList: document.getElementById('history-list'),
+            accordions: document.querySelectorAll('.accordion-toggle'),
+            // Editor
+            editorContainer: document.getElementById('editor-container'),
+            editorLines: document.getElementById('editor-lines'),
+            editorTextarea: document.getElementById('editor-textarea'),
+            editorHighlight: document.getElementById('editor-highlight'),
+            // Footer
+            invokeAiFooterBtn: document.getElementById('invoke-ai-footer-btn'),
+            toggleTerminalBtn: document.getElementById('toggle-terminal-btn'),
+            // AI Panel
+            aiResponsePanel: document.getElementById('ai-response-panel'),
+            aiPanelContent: document.getElementById('ai-panel-content'),
+            aiFilterInput: document.getElementById('ai-filter-input'),
+            aiPanelCloseBtn: document.getElementById('ai-panel-close-btn'),
+            // Prompt Modal
+            promptModal: document.getElementById('prompt-modal'),
+            modalModeAi: document.getElementById('modal-mode-ai'),
+            modalModeOrchestrator: document.getElementById('modal-mode-orchestrator'),
+            modalSearchOption: document.getElementById('modal-search-option'),
+            useSearchCheckbox: document.getElementById('useSearch'),
+            promptTextarea: document.getElementById('prompt-textarea'),
+            modalOrchestratorOptions: document.getElementById('modal-orchestrator-options'),
+            modalAgentList: document.getElementById('modal-agent-list'),
+            modalAgentCountLabel: document.getElementById('modal-agent-count-label'),
+            snippetTextarea: document.getElementById('snippet-textarea'),
+            snippetHighlight: document.getElementById('snippet-highlight'),
+            contextTextarea: document.getElementById('context-textarea'),
+            modalCancelBtn: document.getElementById('modal-cancel-btn'),
+            modalSubmitBtn: document.getElementById('modal-submit-btn'),
+            // Preview Panel
+            previewPanel: document.getElementById('preview-panel'),
+            previewPanelHeader: document.getElementById('preview-panel-header'),
+            previewPanelCloseBtn: document.getElementById('preview-panel-close-btn'),
+            previewIframe: document.getElementById('preview-iframe'),
+            previewPanelResizer: document.getElementById('preview-panel-resizer'),
+            // Terminal
+            terminal: document.getElementById('terminal'),
+            terminalHistory: document.getElementById('terminal-history'),
+            terminalForm: document.getElementById('terminal-form'),
+            terminalInput: document.getElementById('terminal-input'),
+            terminalCloseBtn: document.getElementById('terminal-close-btn'),
+        };
+
+        // --- GEMINI API SERVICE ---
+        const API_KEY = process.env.API_KEY;
+        if (!API_KEY) {
+            console.warn('Gemini API key not found. Please set the API_KEY environment variable.');
+        }
+        const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+        const personas = [
+            { name: 'Performance Optimizer', description: 'Focuses on maximum performance, low-level optimization, bit-twiddling, and efficient memory usage. Writes highly optimized, fast code.'},
+            { name: 'Code Readability Advocate', description: 'Prioritizes clean, elegant, and maintainable code. Uses design patterns, clear naming conventions, and extensive comments.'},
+            { name: 'Modernist Developer', description: 'Leverages the latest language features, functional programming concepts, and modern idioms to write concise and expressive code.'},
+            { name: 'Robustness Engineer', description: 'Emphasizes resilience and reliability. Writes code with comprehensive error handling, input validation, and edge-case management.'},
+            { name: 'Data Structures Specialist', description: 'Solves problems from a data-structures-first perspective, always choosing the most optimal data structure for the task at hand.'},
+            { name: 'Theoretical Scientist', description: 'Approaches problems from a mathematical or theoretical computer science perspective, ensuring algorithmic purity and correctness.'},
+            { name: 'Simplicity Champion', description: "Advocates for simple, straightforward, and easy-to-understand solutions, avoiding unnecessary complexity. Prefers brute-force if it's clearer."},
+            { name: 'Scalability Architect', description: 'Designs solutions that can handle massive datasets and high concurrency, considering distributed systems principles.'},
+            { name: 'Security Specialist', description: 'Focuses on secure coding practices, identifying potential vulnerabilities, and implementing robust defenses against common exploits.'},
+            { name: 'UI/UX Futurist', description: 'Prioritizes an exceptional and intuitive user experience, focusing on accessibility, modern design patterns, and fluid interactivity.'},
+            { name: 'API Architect', description: 'Designs clean, maintainable, and scalable API contracts. Focuses on RESTful principles, data modeling, and clear versioning strategies.'},
+            { name: 'Legacy Code Modernizer', description: 'Specializes in refactoring outdated codebases, untangling monolithic structures, and upgrading them with modern design patterns and technologies.'},
+        ];
+
+        async function generateWithThinkingStream(prompt, context, withSearch, onUpdate) {
+            const fullPrompt = `You are a world-class software architect and principal engineer, an expert in complex algorithms and system design. Your mission is to generate, refactor, or optimize code to solve sophisticated algorithmic challenges. Internally, you must deconstruct the problem, think step-by-step, consider various data structures, analyze time and space complexity, and anticipate edge cases to architect the most robust and performant solution.\n\nUser Request: "${prompt}"\n\nCurrent Code Context:\n\`\`\`\n${context}\n\`\`\`\n\nProduce only the final, complete, and production-ready code block as your response. Do not include any explanations, markdown formatting, or other text outside of the code.`;
+            const config = { thinkingConfig: { thinkingBudget: 32768 } };
+            if (withSearch) config.tools = [{ googleSearch: {} }];
+
+            const stream = await ai.models.generateContentStream({ model: 'gemini-2.5-pro', contents: fullPrompt, config });
+
+            let accumulatedCode = '';
+            let allGroundingChunks = [];
+            for await (const chunk of stream) {
+                try {
+                    const text = chunk.text;
+                    if (typeof text === 'string') accumulatedCode += text;
+                    const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+                    if (Array.isArray(newChunks)) {
+                        newChunks.forEach(newChunk => {
+                            if (newChunk?.web?.uri && !allGroundingChunks.some(existing => existing.web?.uri === newChunk.web?.uri)) {
+                                allGroundingChunks.push(newChunk);
+                            }
+                        });
+                    }
+                    onUpdate({ code: accumulatedCode, groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : undefined });
+                } catch (error) {
+                    console.error('Error processing stream chunk:', { error, chunk });
+                }
+            }
+        }
+
+        async function runMultiAgentConsensus(prompt, context, selectedPersonaNames) {
+             const selectedPersonas = personas.filter(p => selectedPersonaNames.includes(p.name));
+            if (selectedPersonas.length === 0) return [];
+            const prompts = selectedPersonas.map(persona => `You are an AI software engineer with a highly specialized expert persona.\nPersona: ${persona.description}\n\nYour mission is to fulfill the user's request based *strictly* on your assigned persona. Analyze the problem, consider all constraints and possibilities from your persona's unique viewpoint, and generate the optimal code solution.\n\nUser Request: "${prompt}"\n\nCurrent Code Context:\n\`\`\`\n${context}\n\`\`\`\n\nProduce only the final, complete, and production-ready code block as your response. Do not include any explanations, markdown formatting, or other text outside of the code.`);
+            const promises = prompts.map(p => ai.models.generateContent({ model: 'gemini-2.5-flash', contents: p }));
+            const responses = await Promise.all(promises);
+
+            const candidatesMap = new Map();
+            responses.forEach((res, i) => {
+                const content = res.text.trim();
+                if (content) {
+                    const codeMatch = content.match(/```(?:[\w]*)\n?([\s\S]*?)```/);
+                    const finalContent = (codeMatch ? codeMatch[1] : content).trim();
+                    if (!finalContent) return;
+                    if (!candidatesMap.has(finalContent)) candidatesMap.set(finalContent, { agents: [], count: 0 });
+                    const agentName = selectedPersonas[i].name;
+                    const entry = candidatesMap.get(finalContent);
+                    entry.agents.push(agentName);
+                    entry.count += 1;
+                }
+            });
+
+            return Array.from(candidatesMap.entries())
+                .map(([content, data]) => ({ content, agents: data.agents, count: data.count, avgEntropy: Math.random() * 2 + 5, score: data.count + (Math.random() * 2 + 5) * 0.1 }))
+                .sort((a, b) => b.score - a.score);
+        }
+
+        async function runCodeReview(codeContent) {
+            const prompt = `You are a world-class AI code reviewer with deep expertise in identifying bugs, security vulnerabilities, style inconsistencies, and performance bottlenecks. Analyze the following code meticulously. For each issue you find, provide a concise and actionable suggestion. Do not comment on correct code. Only report issues that need attention.\n\nCode to review:\n\`\`\`\n${codeContent}\n\`\`\`\n\nReturn your findings as a JSON object that adheres to the provided schema.`;
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-pro',
+                contents: prompt,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: {
+                        type: Type.OBJECT,
+                        properties: {
+                            findings: {
+                                type: Type.ARRAY,
+                                items: {
+                                    type: Type.OBJECT,
+                                    properties: {
+                                        line_number: { type: Type.INTEGER, description: 'The line number where the issue occurs.' },
+                                        severity: { type: Type.STRING, description: 'The severity of the issue. Must be one of: Critical, Warning, Suggestion.' },
+                                        category: { type: Type.STRING, description: 'The category of the issue. Must be one of: Bug, Security, Style, Performance.' },
+                                        suggestion: { type: Type.STRING, description: 'A clear, actionable suggestion to fix the issue.' },
+                                    },
+                                    required: ['line_number', 'severity', 'category', 'suggestion'],
+                                },
+                            },
+                        },
+                        required: ['findings'],
+                    },
+                },
+            });
+            try {
+                const jsonResponse = JSON.parse(response.text);
+                return (jsonResponse && Array.isArray(jsonResponse.findings)) ? jsonResponse.findings : [];
+            } catch (e) {
+                console.error('Failed to parse code review response:', e);
+                throw new Error('Could not parse AI code review response.');
+            }
+        }
+        
+        // --- FILE SYSTEM HELPERS ---
+        const fs = {
+            get: (root, path) => {
+                const parts = path.split('/').filter(p => p);
+                let currentNode = root;
+                for (const part of parts) {
+                    if (currentNode.type === 'folder' && currentNode.children[part]) {
+                        currentNode = currentNode.children[part];
+                    } else {
+                        return undefined;
+                    }
+                }
+                return currentNode;
+            },
+            set: (root, path, value) => {
+                const newRoot = JSON.parse(JSON.stringify(root));
+                const parts = path.split('/').filter(p => p);
+                const fileName = parts.pop();
+                if (!fileName) return newRoot;
+                let currentNode = newRoot;
+                for (const part of parts) {
+                    if (!currentNode.children[part] || currentNode.children[part].type !== 'folder') {
+                        currentNode.children[part] = { type: 'folder', children: {} };
+                    }
+                    currentNode = currentNode.children[part];
+                }
+                currentNode.children[fileName] = value;
+                return newRoot;
+            },
+            unset: (root, path) => {
+                const newRoot = JSON.parse(JSON.stringify(root));
+                const parts = path.split('/').filter(p => p);
+                const fileName = parts.pop();
+                if (!fileName) return newRoot;
+                let parentNode = newRoot;
+                for (let i = 0; i < parts.length; i++) {
+                    if (parentNode.children[parts[i]] && parentNode.children[parts[i]].type === 'folder') {
+                        parentNode = parentNode.children[parts[i]];
+                    } else {
+                        return newRoot;
+                    }
+                }
+                delete parentNode.children[fileName];
+                return newRoot;
+            }
+        };
+
+        // --- SYNTAX HIGHLIGHTER ---
+        const highlighter = (() => {
+            const typeToClassMap = { comment: 'text-slate-500 italic', string: 'text-lime-400', number: 'text-amber-500 font-semibold', keyword: 'text-pink-400 font-semibold', type: 'text-sky-300', function: 'text-[#4ac94a]', bracket: 'text-purple-400 font-bold', op: 'text-slate-400', id: 'text-slate-300', tag: 'text-pink-400 font-semibold', 'attr-name': 'text-sky-300', 'attr-value': 'text-lime-400', color: 'text-fuchsia-400 font-semibold', property: 'text-sky-300', selector: 'text-amber-500', key: 'text-sky-300', boolean: 'text-pink-400', null: 'text-purple-400', meta: 'text-cyan-400', variable: 'text-teal-300', 'at-rule': 'text-purple-400', unknown: 'text-slate-300', error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy' };
+            const languageRules = {
+                js: [
+                    { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ }, { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ }, { type: 'string', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i }, { type: 'keyword', regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/ }, { type: 'boolean', regex: /^\b(true|false)\b/ }, { type: 'null', regex: /^\b(null|undefined)\b/ }, { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ }, { type: 'bracket', regex: /^[\[\]{}()]/ }, { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ }, { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+                html: [
+                    { type: 'meta', regex: /^<!DOCTYPE[\s\S]*?>/i }, { type: 'comment', regex: /^<!--[\s\S]*?-->/ }, { type: 'tag', regex: /^<\/?[\w\d\-]+/ }, { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ }, { type: 'op', regex: /^=/ }, { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ }, { type: 'tag', regex: /^>/ }, { type: 'text', regex: /^[^<]+/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+                css: [
+                    { type: 'comment', regex: /^\/\*[\s\S]*?\*\// }, { type: 'at-rule', regex: /^@[\w\-]+/ }, { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ }, { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ }, { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ }, { type: 'function', regex: /^\b(?:url|var|calc|rgb|rgba|hsl|hsla)(?=\()/ }, { type: 'color', regex: /^#(?:[0-9a-fA-F]{3,8})\b/ }, { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s|deg|fr|ms)?\b/i }, { type: 'keyword', regex: /^\b(!important|auto|inherit|initial|unset|none|block|inline|inline-block|flex|grid|absolute|relative|fixed|static|sticky|solid|dashed|dotted|hidden|visible|scroll|uppercase|lowercase|capitalize|center|left|right|justify|start|end|bold|normal|italic)\b/i }, { type: 'op', regex: /^[:;,>+~]/ }, { type: 'bracket', regex: /^[\[\]{}()]/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+                json: [
+                    { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ }, { type: 'string', regex: /^"(?:\\.|[^"])*"/ }, { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i }, { type: 'keyword', regex: /^\b(true|false|null)\b/ }, { type: 'op', regex: /^[:,]/ }, { type: 'bracket', regex: /^[\[\]{}()]/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+                py: [
+                    { type: 'comment', regex: /^#[^\n]*/ }, { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ }, { type: 'keyword', regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/ }, { type: 'boolean', regex: /^\b(True|False)\b/ }, { type: 'null', regex: /^\b(None)\b/ }, { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ }, { type: 'meta', regex: /^@\w+/ }, { type: 'number', regex: /^\b\d+(\.\d+)?\b/ }, { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ }, { type: 'bracket', regex: /^[\[\]{}()]/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+                bash: [
+                    { type: 'comment', regex: /^#[^\n]*/ }, { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ }, { type: 'keyword', regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/ }, { type: 'function', regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/ }, { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ }, { type: 'variable', regex: /^\$\{[^}]*\}/ }, { type: 'number', regex: /^\b\d+\b/ }, { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ }, { type: 'bracket', regex: /^[()]/ }, { type: 'whitespace', regex: /^\s+/ }
+                ],
+            };
+            const escapeHtml = (str) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            const tokenize = (text, language) => {
+                const rules = languageRules[language] || [];
+                if (rules.length === 0) return [{ type: 'unknown', value: text }];
+                const tokens = [];
+                let position = 0;
+                while (position < text.length) {
+                    let matched = false;
+                    for (const rule of rules) {
+                        const match = rule.regex.exec(text.slice(position));
+                        if (match && match[0].length > 0) {
+                            tokens.push({ type: rule.type, value: match[0] });
+                            position += match[0].length;
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        tokens.push({ type: 'unknown', value: text[position] });
+                        position++;
+                    }
+                }
+                return tokens;
+            };
+
+            return {
+                highlight: (text, language) => {
+                    if (!text) return '';
+                    const tokens = tokenize(text, language);
+                    return tokens.map(token => {
+                        const className = typeToClassMap[token.type] || typeToClassMap['unknown'];
+                        return `<span class="${className}">${escapeHtml(token.value)}</span>`;
+                    }).join('');
+                },
+                getLanguageFromPath: (path) => {
+                    const extension = path.split('.').pop() || '';
+                    const langMap = { js: 'js', jsx: 'js', ts: 'js', tsx: 'js', css: 'css', html: 'html', json: 'json', py: 'py', sh: 'bash', bash: 'bash' };
+                    return langMap[extension.toLowerCase()] || 'plaintext';
+                }
+            };
+        })();
+
+        // --- RENDER FUNCTIONS ---
+        function renderEditor() {
+            DOMElements.editorTextarea.value = state.editorContent;
+            DOMElements.editorHighlight.innerHTML = highlighter.highlight(state.editorContent + '\n', state.fileType);
+            const lineCount = state.editorContent.split('\n').length;
+            DOMElements.editorLines.innerHTML = Array.from({ length: lineCount }, (_, i) => `<div>${i + 1}</div>`).join('');
+            updateStats();
+        }
+
+        function renderFileSystem() {
+            const createNode = (name, node, path, depth) => {
+                const isFolder = node.type === 'folder';
+                const container = document.createElement('div');
+                const item = document.createElement('div');
+                item.className = `flex items-center justify-between group p-1 rounded cursor-pointer ${state.activeFilePath === path ? 'bg-[#4ac94a]/30' : 'hover:bg-white/10'}`;
+                item.style.paddingLeft = `${depth * 12 + 4}px`;
+                item.innerHTML = `
+                    <div class="flex items-center gap-1.5 truncate">
+                        ${isFolder ? '<span class="transition-transform rotate-90">▶</span>' : '<span class="opacity-50">●</span>'}
+                        <span class="truncate">${name}</span>
+                    </div>
+                    <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        ${isFolder ? `<button title="New File" class="action-btn" data-action="new-file" data-path="${path}">+&#📄;</button><button title="New Folder" class="action-btn" data-action="new-folder" data-path="${path}">+&#📁;</button>` : ''}
+                        <button title="Delete" class="action-btn" data-action="delete" data-path="${path}">&#🗑️;</button>
+                    </div>`;
+                item.querySelector('.flex.items-center.gap-1.5').addEventListener('click', (e) => {
+                    if (isFolder) {
+                        e.currentTarget.parentElement.nextElementSibling?.classList.toggle('hidden');
+                        e.currentTarget.querySelector('span').classList.toggle('rotate-90');
+                    } else {
+                        handleOpenFile(path);
+                    }
+                });
+                container.appendChild(item);
+                if (isFolder) {
+                    const childrenContainer = document.createElement('div');
+                    const sortedChildren = Object.entries(node.children).sort(([aName, aNode], [bName, bNode]) => {
+                        if (aNode.type === 'folder' && bNode.type === 'file') return -1;
+                        if (aNode.type === 'file' && bNode.type === 'folder') return 1;
+                        return aName.localeCompare(bName);
+                    });
+                    sortedChildren.forEach(([childName, childNode]) => {
+                        childrenContainer.appendChild(createNode(childName, childNode, `${path}/${childName}`, depth + 1));
+                    });
+                    container.appendChild(childrenContainer);
+                }
+                return container;
+            };
+            DOMElements.fileExplorerRoot.innerHTML = '';
+            const rootNode = createNode('root', state.fileSystem, '', -1).querySelector('div > div'); // get children of the fake root
+            DOMElements.fileExplorerRoot.append(...rootNode.children);
+        }
+        
+        function renderStatusBar() {
+            DOMElements.statusFilename.textContent = state.fileName;
+            DOMElements.statusStats.textContent = `Cursor: ${state.stats.cursor} | Lines: ${state.stats.lines} | Chars: ${state.stats.chars} | History: ${state.history.length}`;
+        }
+
+        function renderHistory() {
+            DOMElements.historyList.innerHTML = state.history.map((content, index) =>
+                `<button data-index="${index}" title="${escape(content)}" class="history-item w-full text-left p-1 rounded text-xs mt-1 truncate transition-colors ${state.historyIndex === index ? 'bg-[#4ac94a]/30 text-white font-semibold' : 'bg-[#22241e]/50 hover:bg-[#a03333]'}">
+                    State ${index + 1}: ${content.substring(0, 30).replace(/\s+/g, ' ')}...
+                </button>`
+            ).reverse().join('');
+        }
+        
+        function renderAiPanel() {
+            DOMElements.aiResponsePanel.classList.toggle('hidden', !state.isAiPanelOpen);
+            if (!state.isAiPanelOpen) return;
+            
+            const query = DOMElements.aiFilterInput.value.toLowerCase();
+            const { agents, consensus, generatedCode, groundingChunks, codeReviewFindings } = state.aiState;
+
+            let contentHTML = '';
+            
+            // Agents
+            agents.forEach(agent => {
+                const contentString = typeof agent.content === 'string' ? agent.content : '';
+                if (!query || agent.title.toLowerCase().includes(query) || contentString.toLowerCase().includes(query)) {
+                    contentHTML += getAgentCardHTML(agent);
+                }
+            });
+            
+            // Code Review Panel
+            if (codeReviewFindings) {
+                contentHTML += getCodeReviewPanelHTML(codeReviewFindings);
+            }
+            // Generated Code / Diff Panel
+            else if (generatedCode || consensus?.selectedCandidate) {
+                contentHTML += getCodePanelHTML(generatedCode, consensus);
+            }
+
+            // Consensus Panel
+            if (consensus) {
+                contentHTML += getConsensusPanelHTML(consensus);
+            }
+
+            // Grounding Panel
+            if (groundingChunks) {
+                contentHTML += getGroundingPanelHTML(groundingChunks);
+            }
+
+            DOMElements.aiPanelContent.innerHTML = contentHTML;
+        }
+        
+        function renderTerminal() {
+             DOMElements.terminal.classList.toggle('translate-y-full', !state.isTerminalOpen);
+             DOMElements.terminalHistory.innerHTML = state.terminalHistory.map(line => {
+                const styles = { input: 'text-cyan-400', output: 'text-slate-300 whitespace-pre-wrap', error: 'text-red-500', system: 'text-yellow-500', help: 'text-slate-400 whitespace-pre-wrap' };
+                const prefix = line.type === 'input' ? 'QF>' : '...';
+                return `<div class="flex gap-2"><span class="text-gray-600 select-none">${prefix}</span><div class="${styles[line.type]}">${line.content}</div></div>`;
+             }).join('');
+             DOMElements.terminalHistory.scrollTop = DOMElements.terminalHistory.scrollHeight;
+        }
+
+        // --- UI RENDER HELPERS ---
+        function getAgentCardHTML(agent) {
+             const getStyle = (agent) => {
+                switch (agent.status) {
+                    case 'working': return `border-color:${agent.color}; box-shadow:0 0 25px ${agent.color}99; animation:agentPulse 2s infinite ease-in-out;`;
+                    case 'error': return `border-color:#CF6679; box-shadow:0 0 15px #CF667999; animation:agentError 0.5s linear;`;
+                    case 'idle': return `border-color:${agent.color}; animation:agentIdle 3s infinite ease-in-out;`;
+                    case 'done': return `border-color:${agent.color}; opacity:0.9;`;
+                    default: return `border-color:${agent.color};`;
+                }
+            };
+            const statusIcon = {
+                working: `<div class="quantum-spinner w-4 h-4 inline-block mr-1.5 relative"><div class="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div><div class="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div></div>`,
+                done: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>`,
+                error: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`,
+            };
+            return `
+            <div class="agent-card bg-[#313328] rounded-lg p-3 mb-2 border-l-4 transition-all duration-300" style="${getStyle(agent)}">
+                <div class="agent-title font-bold text-sm mb-1" style="color: ${agent.status === 'error' ? '#CF6679' : agent.color}">${agent.title}</div>
+                <div class="agent-subtitle text-xs text-[#999966] mb-1.5">${agent.subtitle}</div>
+                <div class="agent-content text-xs min-h-[20px] flex items-center">${statusIcon[agent.status] || ''} ${agent.content}</div>
+            </div>`;
+        }
+
+        function getCodeReviewPanelHTML(findings) {
+             const severityStyles = {
+                Critical: { icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z', color: 'text-red-400', borderColor: 'border-red-500' },
+                Warning: { icon: 'M20.944 15.006L13.52 3.29A2 2 0 0011.808 2H12a2 2 0 00-1.789 1.144L2.981 15.14A2 2 0 004.69 18h14.62a2 2 0 001.634-2.994zM12 6a1 1 0 011 1v4a1 1 0 01-2 0V7a1 1 0 011-1zm1 9a1 1 0 11-2 0 1 1 0 012 0z', color: 'text-yellow-400', borderColor: 'border-yellow-500' },
+                Suggestion: { icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'text-sky-400', borderColor: 'border-sky-500' },
+            };
+            if (findings.length === 0) return `<div class="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4 text-center"><div class="flex items-center gap-2 justify-center font-bold text-green-400 mb-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg><span>No Issues Found</span></div><p class="text-xs text-gray-400">The AI reviewer analyzed the code and found no issues to report.</p></div>`;
+            return `<div class="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4">
+                <div class="font-bold text-purple-400 mb-3 text-sm">AI Code Review Findings</div>
+                <div class="space-y-3 max-h-96 overflow-y-auto pr-2">${findings.map(finding => {
+                    const style = severityStyles[finding.severity] || severityStyles.Suggestion;
+                    return `<div class="finding-item bg-white/5 rounded p-2.5 border-l-4 ${style.borderColor}"><div class="flex items-center gap-3 mb-1.5"><div class="flex items-center gap-1.5 font-bold text-xs ${style.color}"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${style.icon}" /></svg>${finding.severity}</div><div class="text-xs text-gray-400"><span class="font-semibold">Line:</span> ${finding.line_number}</div><div class="text-xs text-gray-400"><span class="font-semibold">Category:</span> ${finding.category}</div></div><p class="text-xs text-slate-300 whitespace-pre-wrap">${finding.suggestion}</p></div>`;
+                }).join('')}</div></div>`;
+        }
+
+        function getCodePanelHTML(generatedCode, consensus) {
+            const codeToActOn = consensus?.selectedCandidate ?? generatedCode;
+            return `<div class="code-container bg-black/30 rounded-lg mt-4 border border-gray-700 flex flex-col">
+                <div class="flex items-center justify-between p-2 border-b border-gray-700 bg-black/20">
+                    <div class="flex gap-1"><button data-view="code" class="code-view-btn px-3 py-1 text-xs rounded transition-colors bg-[#4ac94a] text-white font-semibold">Generated Code</button><button data-view="diff" class="code-view-btn px-3 py-1 text-xs rounded transition-colors hover:bg-white/10">Diff</button></div>
+                    <span class="text-xs font-semibold text-[#4ac94a] animation-title-pulse">Final Output</span>
+                </div>
+                <div class="p-3.5 max-h-72 overflow-y-auto">
+                    <pre class="text-xs font-mono whitespace-pre-wrap text-slate-300"><code id="ai-code-output">${codeToActOn}</code></pre>
+                </div>
+                <div class="p-2.5 border-t border-gray-700 flex gap-2">
+                    <button id="ai-copy-btn" class="flex-1 bg-[#4ac94a] hover:bg-green-400 text-xs px-2 py-1.5 rounded transition-colors">Copy Code</button>
+                    <button id="ai-apply-btn" class="flex-1 bg-[#5bc0de] hover:bg-cyan-400 text-xs px-2 py-1.5 rounded transition-colors">Apply to Editor</button>
+                </div>
+            </div>`;
+        }
+
+        function getGroundingPanelHTML(chunks) {
+            return `<div class="grounding-panel bg-yellow-900/20 border border-[#FFD54F] rounded-lg p-3.5 mt-4">
+                <div class="flex items-center gap-2 font-bold text-[#FFD54F] mb-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3.5a1.5 1.5 0 01.5 2.915V9.5a1.5 1.5 0 01-3 0V6.415A1.5 1.5 0 0110 3.5z" /><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM2 10a8 8 0 1116 0 8 8 0 01-16 0z" /></svg><span>Grounded on Real-Time Google Search</span></div>
+                <ol class="list-decimal list-inside text-xs space-y-2 pl-1">${chunks.map(chunk => chunk.web ? `<li class="truncate"><a href="${chunk.web.uri}" target="_blank" rel="noopener noreferrer" title="${chunk.web.title || chunk.web.uri}" class="text-sky-400 hover:underline hover:text-sky-300 transition-colors">${chunk.web.title || chunk.web.uri}</a></li>` : '').join('')}</ol>
+            </div>`;
+        }
+
+        function getConsensusPanelHTML(consensus) {
+            return `<div class="consensus-panel bg-[#313328] border border-[#BB86FC] rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto">
+                <div class="consensus-header font-bold text-[#BB86FC] mb-2.5 flex justify-between items-center">
+                    <span>Multi-Agent Consensus Results</span><span class="bg-[#BB86FC] text-white px-1.5 py-0.5 rounded-full text-xs">Score: ${consensus.score}</span>
+                </div><div>${consensus.allCandidates.map((c, i) =>
+                `<div class="candidate-item bg-white/5 rounded p-2 mb-2 border-l-4 ${i === 0 ? 'border-l-[#4ac94a] bg-green-500/10' : 'border-l-[#03DAC6]'}">
+                    <div class="text-xs text-[#999966] flex justify-between mb-1"><span>${c.agents.join(', ')}</span><span>Count: ${c.count}</span></div>
+                    <div class="text-xs font-mono whitespace-pre-wrap max-h-20 overflow-hidden text-ellipsis">${c.content.substring(0, 200)}${c.content.length > 200 ? '...' : ''}</div>
+                </div>`
+            ).join('')}</div></div>`;
+        }
+        
+        // --- ACTION HANDLERS ---
+        function handleSetContent(newContent) {
+            if (state.activeFilePath) {
+                state.fileSystem = fs.set(state.fileSystem, state.activeFilePath, { ...fs.get(state.fileSystem, state.activeFilePath), content: newContent });
+            }
+            if (newContent !== state.history[state.historyIndex]) {
+                const newHistory = [...state.history.slice(0, state.historyIndex + 1), newContent];
+                state.history = newHistory;
+                state.historyIndex = newHistory.length - 1;
+            }
+            state.editorContent = newContent;
+            renderEditor();
+            renderHistory();
+        }
+
+        function handleOpenFile(path) {
+            const node = fs.get(state.fileSystem, path);
+            if (node && node.type === 'file') {
+                state.activeFilePath = path;
+                state.editorContent = node.content;
+                state.fileName = path.split('/').pop() || 'untitled';
+                state.fileType = highlighter.getLanguageFromPath(path);
+                state.history = [node.content];
+                state.historyIndex = 0;
+                renderEditor();
+                renderStatusBar();
+                renderFileSystem(); // to update active file highlight
+                renderHistory();
+            }
+        }
+        
+        function updateStats() {
+            const { selectionStart } = DOMElements.editorTextarea;
+            const textToCursor = state.editorContent.substring(0, selectionStart);
+            const line = textToCursor.split('\n').length;
+            const col = selectionStart - textToCursor.lastIndexOf('\n');
+            state.stats = { cursor: `${line}:${col}`, lines: state.editorContent.split('\n').length, chars: state.editorContent.length, history: state.history.length };
+            renderStatusBar();
+        }
+
+        const runAgentFlow = async (task) => {
+            updateAgent('nexus', { status: 'working', content: 'Orchestrating quantum fractal reasoning...' });
+            await new Promise(r => setTimeout(r, 400));
+            updateAgent('nexus', { status: 'done' });
+            updateAgent('cognito', { status: 'working', content: 'Executing hyperthreaded fractal analysis...' });
+            await new Promise(r => setTimeout(r, 400));
+            updateAgent('oracle', { status: 'working', content: 'Consulting specialized agent personas...' });
+            await new Promise(r => setTimeout(r, 400));
+            const result = await task();
+            updateAgent('oracle', { status: 'done', content: 'Specialist insights acquired.' });
+            updateAgent('cognito', { status: 'done', content: 'Fractal analysis complete.' });
+            updateAgent('relay', { status: 'working', content: 'Transmitting quantum data streams...' });
+            await new Promise(r => setTimeout(r, 400));
+            updateAgent('relay', { status: 'done' });
+            updateAgent('sentinel', { status: 'working', content: 'Validating quantum consensus...' });
+            await new Promise(r => setTimeout(r, 400));
+            updateAgent('sentinel', { status: 'done' });
+            updateAgent('echo', { status: 'working', content: 'Generating quantum fractal report...' });
+            await new Promise(r => setTimeout(r, 400));
+            return result;
+        };
+
+        const updateAgent = (name, newStatus) => {
+            const agent = state.aiState.agents.find(a => a.name === name);
+            if(agent) Object.assign(agent, newStatus);
+            renderAiPanel();
+        };
+
+        async function handleModalSubmit() {
+            if (state.aiState.isLoading) return;
+            const prompt = DOMElements.promptTextarea.value;
+            const context = DOMElements.contextTextarea.value;
+            const snippet = DOMElements.snippetTextarea.value;
+            const useSearch = DOMElements.useSearchCheckbox.checked;
+            const mode = DOMElements.modalModeAi.classList.contains('bg-[#4ac94a]') ? 'ai' : 'orchestrator';
+            const selectedAgents = Array.from(DOMElements.modalAgentList.querySelectorAll('button.bg-\\[\\#4ac94a\\]\\/30')).map(btn => btn.dataset.name);
+
+            closePromptModal();
+            state.originalCodeForDiff = state.editorContent;
+            const currentPrompt = prompt || 'Optimize this code with quantum fractal patterns';
+            const fullContext = `EDITOR CONTENT:\n\`\`\`\n${state.editorContent}\n\`\`\`\n\nPASTED SNIPPET:\n\`\`\`\n${snippet}\n\`\`\`\n\nADDITIONAL CONTEXT:\n\`\`\`\n${context}\n\`\`\``;
+
+            state.isAiPanelOpen = true;
+            state.aiState = { agents: JSON.parse(JSON.stringify(initialAgentState)), isLoading: true, consensus: null, generatedCode: null, groundingChunks: null, codeReviewFindings: null };
+            DOMElements.invokeAiFooterBtn.disabled = true;
+            DOMElements.invokeAiFooterBtn.textContent = 'Processing...';
+            renderAiPanel();
+
+            try {
+                if (mode === 'orchestrator') {
+                    const candidates = await runAgentFlow(() => runMultiAgentConsensus(currentPrompt, fullContext, selectedAgents));
+                    if (candidates.length > 0) {
+                        state.aiState.consensus = { selectedCandidate: candidates[0].content, score: candidates[0].score.toFixed(2), count: candidates[0].count, avgEntropy: candidates[0].avgEntropy.toFixed(2), rootAgent: candidates[0].agents[0], allCandidates: candidates };
+                        updateAgent('echo', { status: 'done', content: 'Multi-Agent Consensus Complete.' });
+                    } else {
+                        updateAgent('echo', { status: 'error', content: 'Consensus failed. No candidates generated.' });
+                    }
+                } else {
+                    if (useSearch) {
+                        updateAgent('nexus', { status: 'working', content: 'Initiating grounded quantum query...' });
+                        await new Promise(r => setTimeout(r, 200));
+                        updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
+                    }
+                    await runAgentFlow(() => generateWithThinkingStream(currentPrompt, fullContext, useSearch, (update) => {
+                        state.aiState.generatedCode = update.code;
+                        state.aiState.groundingChunks = update.groundingChunks || null;
+                        renderAiPanel();
+                    }));
+                    if (useSearch) {
+                        await new Promise(r => setTimeout(r, 200));
+                        updateAgent('relay', { status: 'done' });
+                        updateAgent('cognito', { status: 'working', content: 'Analyzing grounded information...' });
+                        await new Promise(r => setTimeout(r, 200));
+                        updateAgent('cognito', { status: 'done', content: 'Analysis complete.' });
+                    }
+                    updateAgent('echo', { status: 'done', content: useSearch ? 'Grounded Quantum Solution Generated.' : 'Quantum Fractal Solution Generated.' });
+                }
+            } catch (error) {
+                console.error('Gemini API Error:', error);
+                updateAgent('echo', { status: 'error', content: `Quantum Error: ${error.message}` });
+            } finally {
+                state.aiState.isLoading = false;
+                DOMElements.invokeAiFooterBtn.disabled = false;
+                DOMElements.invokeAiFooterBtn.textContent = 'Invoke Quantum AI...';
+                renderAiPanel();
+            }
+        }
+        
+        function openPromptModal(mode, prompt = '', snippet = '') {
+            DOMElements.promptTextarea.value = prompt;
+            DOMElements.snippetTextarea.value = snippet;
+            handleSnippetChange();
+            DOMElements.contextTextarea.value = '';
+            
+            const isOrchestrator = mode === 'orchestrator';
+            DOMElements.modalModeAi.classList.toggle('bg-[#4ac94a]', !isOrchestrator);
+            DOMElements.modalModeAi.classList.toggle('text-white', !isOrchestrator);
+            DOMElements.modalModeAi.classList.toggle('font-bold', !isOrchestrator);
+            DOMElements.modalModeOrchestrator.classList.toggle('bg-[#4ac94a]', isOrchestrator);
+            DOMElements.modalModeOrchestrator.classList.toggle('text-white', isOrchestrator);
+            DOMElements.modalModeOrchestrator.classList.toggle('font-bold', isOrchestrator);
+
+            DOMElements.modalSearchOption.classList.toggle('hidden', isOrchestrator);
+            DOMElements.modalOrchestratorOptions.classList.toggle('hidden', !isOrchestrator);
+            DOMElements.promptModal.classList.remove('hidden');
+            DOMElements.promptModal.classList.add('flex');
+            DOMElements.promptTextarea.focus();
+        }
+
+        function closePromptModal() {
+            DOMElements.promptModal.classList.add('hidden');
+            DOMElements.promptModal.classList.remove('flex');
+        }
+        
+        // --- INITIALIZATION ---
+        function init() {
+            // Render initial state
+            renderEditor();
+            renderFileSystem();
+            renderStatusBar();
+            renderHistory();
+            renderTerminal();
+            
+            // Setup event listeners
+            DOMElements.toggleLeftPanelBtn.addEventListener('click', () => {
+                state.isLeftPanelOpen = !state.isLeftPanelOpen;
+                DOMElements.leftPanel.classList.toggle('-ml-60', !state.isLeftPanelOpen);
+            });
+
+            DOMElements.accordions.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const target = document.getElementById(btn.dataset.target);
+                    target.classList.toggle('hidden');
+                    btn.querySelector('span:last-child').classList.toggle('rotate-[-90deg]');
+                });
+            });
+
+            DOMElements.editorTextarea.addEventListener('input', e => handleSetContent(e.target.value));
+            DOMElements.editorTextarea.addEventListener('scroll', () => {
+                DOMElements.editorHighlight.parentElement.scrollTop = DOMElements.editorTextarea.scrollTop;
+                DOMElements.editorHighlight.parentElement.scrollLeft = DOMElements.editorTextarea.scrollLeft;
+                DOMElements.editorLines.scrollTop = DOMElements.editorTextarea.scrollTop;
+            });
+            DOMElements.editorTextarea.addEventListener('keydown', e => {
+                 if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = e.target.selectionStart;
+                    const end = e.target.selectionEnd;
+                    const indentedValue = e.target.value.substring(0, start) + '  ' + e.target.value.substring(end);
+                    handleSetContent(indentedValue);
+                    setTimeout(() => { e.target.selectionStart = e.target.selectionEnd = start + 2; }, 0);
+                }
+            });
+            ['keyup', 'click', 'selectionchange'].forEach(evt => document.addEventListener(evt, updateStats));
+            
+            DOMElements.fontSizeInput.addEventListener('change', e => {
+                state.editorFontSize = parseInt(e.target.value, 10);
+                const fontSizeStyle = `${state.editorFontSize}px`;
+                DOMElements.editorLines.style.fontSize = fontSizeStyle;
+                DOMElements.editorTextarea.style.fontSize = fontSizeStyle;
+                DOMElements.editorHighlight.parentElement.style.fontSize = fontSizeStyle;
+            });
+
+            DOMElements.fileExplorerRoot.addEventListener('click', e => {
+                const button = e.target.closest('.action-btn');
+                if (!button) return;
+                e.stopPropagation();
+                const { action, path } = button.dataset;
+                if (action === 'new-file') {
+                    const fileName = prompt('Enter new file name:');
+                    if (fileName) {
+                        state.fileSystem = fs.set(state.fileSystem, `${path}/${fileName}`, { type: 'file', content: '' });
+                        renderFileSystem();
+                    }
+                } else if (action === 'new-folder') {
+                     const folderName = prompt('Enter new folder name:');
+                    if (folderName) {
+                        state.fileSystem = fs.set(state.fileSystem, `${path}/${folderName}`, { type: 'folder', children: {} });
+                        renderFileSystem();
+                    }
+                } else if (action === 'delete') {
+                    if (confirm(`Are you sure you want to delete "${path}"?`)) {
+                        state.fileSystem = fs.unset(state.fileSystem, path);
+                        if(state.activeFilePath === path) {
+                            state.activeFilePath = null;
+                            handleSetContent('');
+                            state.fileName = 'No File Open';
+                            state.fileType = 'plaintext';
+                            renderStatusBar();
+                        }
+                        renderFileSystem();
+                    }
+                }
+            });
+            
+            DOMElements.historyList.addEventListener('click', e => {
+                const button = e.target.closest('.history-item');
+                if (button) {
+                    const index = parseInt(button.dataset.index, 10);
+                    state.historyIndex = index;
+                    handleSetContent(state.history[index]);
+                }
+            });
+
+            // AI and Modal buttons
+            DOMElements.runAiBtn.addEventListener('click', () => openPromptModal('ai'));
+            DOMElements.invokeAiFooterBtn.addEventListener('click', () => openPromptModal('ai'));
+            DOMElements.runOrchestratorBtn.addEventListener('click', () => openPromptModal('orchestrator'));
+            DOMElements.modalCancelBtn.addEventListener('click', closePromptModal);
+            DOMElements.modalSubmitBtn.addEventListener('click', handleModalSubmit);
+            DOMElements.aiPanelCloseBtn.addEventListener('click', () => { state.isAiPanelOpen = false; renderAiPanel(); });
+            
+            // Prompt Modal Logic
+            DOMElements.modalModeAi.addEventListener('click', () => openPromptModal('ai', DOMElements.promptTextarea.value, DOMElements.snippetTextarea.value));
+            DOMElements.modalModeOrchestrator.addEventListener('click', () => openPromptModal('orchestrator', DOMElements.promptTextarea.value, DOMElements.snippetTextarea.value));
+            DOMElements.modalAgentList.innerHTML = personas.map(p => `<button type="button" data-name="${p.name}" title="${p.description}" class="agent-select-card p-2 rounded border text-left transition-all duration-200 bg-white/5 border-transparent hover:border-white/20"><div class="font-semibold text-xs text-[#f0f0e0]">${p.name}</div></button>`).join('');
+            DOMElements.modalAgentList.addEventListener('click', e => {
+                const card = e.target.closest('.agent-select-card');
+                if(card) {
+                    card.classList.toggle('bg-[#4ac94a]/30');
+                    card.classList.toggle('border-[#4ac94a]');
+                    const selectedCount = DOMElements.modalAgentList.querySelectorAll('.bg-\\[\\#4ac94a\\]\\/30').length;
+                    DOMElements.modalAgentCountLabel.textContent = `Select at least 2 agents. Currently selected: ${selectedCount}`;
+                    DOMElements.modalSubmitBtn.disabled = selectedCount < 2;
+                    DOMElements.modalSubmitBtn.textContent = selectedCount < 2 ? 'Select more agents' : 'Invoke AI';
+                }
+            });
+            const handleSnippetChange = () => {
+                DOMElements.snippetHighlight.innerHTML = highlighter.highlight(DOMElements.snippetTextarea.value, 'js');
+            }
+            DOMElements.snippetTextarea.addEventListener('input', handleSnippetChange);
+
+            // Terminal
+            DOMElements.toggleTerminalBtn.addEventListener('click', () => { state.isTerminalOpen = !state.isTerminalOpen; renderTerminal(); });
+            DOMElements.terminalCloseBtn.addEventListener('click', () => { state.isTerminalOpen = false; renderTerminal(); });
+            DOMElements.terminalForm.addEventListener('submit', e => {
+                e.preventDefault();
+                const command = DOMElements.terminalInput.value.trim();
+                if (command) {
+                    // handleCommandSubmit(command); // This would be a large function to port
+                    state.terminalHistory.push({ type: 'input', content: command });
+                    state.terminalHistory.push({ type: 'system', content: `Command "${command}" execution not yet implemented in this version.` });
+                    renderTerminal();
+                }
+                DOMElements.terminalInput.value = '';
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
