@@ -1,12 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import type { OrchestratorSettings, EditorStats, TerminalLine } from '../types';
+// FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
+import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode } from '../types';
 
 interface HeaderProps {
     onToggleLeftPanel: () => void;
-    onOpenFile: () => void;
-    onSaveFile: () => void;
-    onSaveAs: () => void;
     onTogglePreview: () => void;
     isPreviewing: boolean;
     onRunAI: () => void;
@@ -18,9 +15,6 @@ interface HeaderProps {
  * Provides primary actions like file operations and invoking AI features.
  * @param {HeaderProps} props - The component props.
  * @param {() => void} props.onToggleLeftPanel - Toggles the visibility of the left sidebar.
- * @param {() => void} props.onOpenFile - Opens a file from the user's disk.
- * @param {() => void} props.onSaveFile - Saves the current editor content.
- * @param {() => void} props.onSaveAs - Saves the current editor content with a new name.
  * @param {() => void} props.onTogglePreview - Toggles the live HTML preview panel.
  * @param {boolean} props.isPreviewing - Indicates if the live preview is active.
  * @param {() => void} props.onRunAI - Opens the prompt modal for a single Quantum AI run.
@@ -40,24 +34,6 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 <div className="w-2 h-2 rounded-full bg-[#4ac94a]"></div>
                 <div className="text-xs text-[#cfcfbd]">Quantum AI: Ready</div>
             </div>
-            <button
-                onClick={props.onOpenFile}
-                className="bg-[#a03333] hover:bg-[#3366a0] text-xs px-2 py-1.5 rounded transition-colors"
-            >
-                Open
-            </button>
-            <button
-                onClick={props.onSaveFile}
-                className="bg-[#a03333] hover:bg-[#3366a0] text-xs px-2 py-1.5 rounded transition-colors"
-            >
-                Save
-            </button>
-            <button
-                onClick={props.onSaveAs}
-                className="bg-[#a03333] hover:bg-[#3366a0] text-xs px-2 py-1.5 rounded transition-colors"
-            >
-                Save As
-            </button>
             <button
                 onClick={props.onTogglePreview}
                 className={`text-xs px-2 py-1.5 rounded transition-colors ${
@@ -111,12 +87,186 @@ export const StatusBar: React.FC<StatusBarProps> = ({ fileName, stats }) => (
                 ></div>
             ))}
         </div>
-        <div>{fileName || 'No File Loaded'}</div>
+        <div>{fileName || 'No File Open'}</div>
         <div>{`Cursor: ${stats.cursor} | Lines: ${stats.lines} | Chars: ${stats.chars} | History: ${stats.history}`}</div>
     </div>
 );
 
-interface LeftPanelProps {
+// --- START: File Explorer Components ---
+
+interface FileExplorerProps {
+    fileSystem: FolderNode;
+    activePath: string | null;
+    onOpenFile: (path: string) => void;
+    onCreateFile: (path: string) => void;
+    onCreateFolder: (path: string) => void;
+    onRename: (path: string, newName: string) => void;
+    onDelete: (path: string) => void;
+}
+
+const FileExplorer: React.FC<FileExplorerProps> = (props) => {
+    return (
+        <div className="text-xs text-[#999966]">
+            <FileTree {...props} node={props.fileSystem} path="" depth={0} />
+        </div>
+    );
+};
+
+const FileTree: React.FC<FileExplorerProps & { node: FolderNode; path: string; depth: number }> = ({
+    node,
+    path,
+    depth,
+    ...rest
+}) => {
+    // FIX: Explicitly type sort callback parameters to resolve type inference issue.
+    const sortedChildren = Object.entries(node.children).sort(([aName, aNode]: [string, FileSystemNode], [bName, bNode]: [string, FileSystemNode]) => {
+        if (aNode.type === 'folder' && bNode.type === 'file') return -1;
+        if (aNode.type === 'file' && bNode.type === 'folder') return 1;
+        return aName.localeCompare(bName);
+    });
+
+    return (
+        <div>
+            {sortedChildren.map(([name, childNode]) => (
+                <FileTreeItem
+                    key={name}
+                    name={name}
+                    node={childNode}
+                    path={`${path}/${name}`}
+                    depth={depth}
+                    {...rest}
+                />
+            ))}
+        </div>
+    );
+};
+
+const FileTreeItem: React.FC<
+    FileExplorerProps & { name: string; node: FileSystemNode; path: string; depth: number }
+> = ({ name, node, path, depth, onOpenFile, activePath, ...rest }) => {
+    const [isExpanded, setIsExpanded] = useState(true);
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [newName, setNewName] = useState(name);
+    const renameInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isRenaming) {
+            renameInputRef.current?.focus();
+            renameInputRef.current?.select();
+        }
+    }, [isRenaming]);
+
+    const handleRenameSubmit = () => {
+        if (newName.trim() && newName.trim() !== name) {
+            rest.onRename(path, newName.trim());
+        }
+        setIsRenaming(false);
+    };
+
+    const isFolder = node.type === 'folder';
+    const isActive = activePath === path;
+
+    const ActionButton: React.FC<{ title: string; onClick: () => void; children: React.ReactNode }> = ({
+        title,
+        onClick,
+        children,
+    }) => (
+        <button
+            title={title}
+            onClick={(e) => {
+                e.stopPropagation();
+                onClick();
+            }}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20 text-gray-400 hover:text-white"
+        >
+            {children}
+        </button>
+    );
+
+    return (
+        <div>
+            <div
+                onClick={() => (isFolder ? setIsExpanded(!isExpanded) : onOpenFile(path))}
+                className={`flex items-center justify-between group p-1 rounded cursor-pointer ${
+                    isActive ? 'bg-[#4ac94a]/30' : 'hover:bg-white/10'
+                }`}
+                style={{ paddingLeft: `${depth * 12 + 4}px` }}
+            >
+                <div className="flex items-center gap-1.5 truncate">
+                    {isFolder ? (
+                        <span className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                    ) : (
+                        <span className="opacity-50">●</span>
+                    )}
+                    {isRenaming ? (
+                        <input
+                            ref={renameInputRef}
+                            type="text"
+                            value={newName}
+                            onChange={(e) => setNewName(e.target.value)}
+                            onBlur={handleRenameSubmit}
+                            onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-[#22241e] text-white p-0 m-0 border border-[#999966] rounded h-5 text-xs w-full"
+                        />
+                    ) : (
+                        <span className="truncate">{name}</span>
+                    )}
+                </div>
+
+                {!isRenaming && (
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isFolder && (
+                            <>
+                                <ActionButton title="New File" onClick={() => rest.onCreateFile(path)}>
+                                    +&#📄;
+                                </ActionButton>
+                                <ActionButton title="New Folder" onClick={() => rest.onCreateFolder(path)}>
+                                    +&#📁;
+                                </ActionButton>
+                            </>
+                        )}
+                        <ActionButton title="Rename" onClick={() => setIsRenaming(true)}>
+                            &#✏️;
+                        </ActionButton>
+                        <ActionButton title="Delete" onClick={() => rest.onDelete(path)}>
+                            &#🗑️;
+                        </ActionButton>
+                    </div>
+                )}
+            </div>
+            {isFolder && isExpanded && <FileTree node={node as FolderNode} path={path} depth={depth + 1} {...rest} />}
+        </div>
+    );
+};
+// --- END: File Explorer Components ---
+
+// --- START: Accordion Component ---
+const Accordion: React.FC<{ title: string; children: React.ReactNode; defaultOpen?: boolean }> = ({
+    title,
+    children,
+    defaultOpen = false,
+}) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    return (
+        <div className="text-xs text-[#999966] border-b border-[#22241e]">
+            <button
+                onClick={() => setIsOpen((prev) => !prev)}
+                className="font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5"
+            >
+                <span>{title}</span>
+                <span className="transition-transform duration-200" style={{ transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                    ▼
+                </span>
+            </button>
+            {isOpen && <div className="p-2 pt-0">{children}</div>}
+        </div>
+    );
+};
+// --- END: Accordion Component ---
+
+interface LeftPanelProps extends FileExplorerProps {
     isOpen: boolean;
     settings: OrchestratorSettings;
     onSettingsChange: (newSettings: OrchestratorSettings) => void;
@@ -132,176 +282,193 @@ interface LeftPanelProps {
     onFontSizeChange: (size: number) => void;
     onSaveDraft: () => void;
     onLoadDraft: () => void;
+    onCodeReview: () => void;
 }
 
 /**
  * Renders the collapsible left panel containing quick actions, settings, and editor history.
  * @param {LeftPanelProps} props - The component props.
- * @param {boolean} props.isOpen - Controls whether the panel is visible.
- * @param {OrchestratorSettings} props.settings - The current settings for the AI orchestrator.
- * @param {(newSettings: OrchestratorSettings) => void} props.onSettingsChange - Callback to update orchestrator settings.
- * @param {() => void} props.onUndo - Triggers an undo action in the editor.
- * @param {() => void} props.onRedo - Triggers a redo action in the editor.
- * @param {(action: 'optimize' | 'document' | 'refactor') => void} props.onQuickAction - Triggers a predefined AI action.
- * @param {() => void} props.onAnalyzeSelection - Opens the prompt modal with the currently selected editor text.
- * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
- * @param {string[]} props.history - An array of editor content states for the history view.
- * @param {number} props.historyIndex - The current index in the history array.
- * @param {(index: number) => void} props.onRevertToState - Callback to revert the editor to a specific history state.
- * @param {number} props.editorFontSize - The current font size of the editor in pixels.
- * @param {(size: number) => void} props.onFontSizeChange - Callback to update the editor's font size.
- * @param {() => void} props.onSaveDraft - Saves the current editor content to local storage.
- * @param {() => void} props.onLoadDraft - Loads the editor content from local storage.
  * @returns {React.ReactElement} The rendered left panel component.
  */
 export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
-    const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+    const {
+        isOpen,
+        settings,
+        onSettingsChange,
+        onUndo,
+        onRedo,
+        onQuickAction,
+        onAnalyzeSelection,
+        onRunOrchestrator,
+        history,
+        historyIndex,
+        onRevertToState,
+        editorFontSize,
+        onFontSizeChange,
+        onSaveDraft,
+        onLoadDraft,
+        onCodeReview,
+        fileSystem,
+        activePath,
+        onOpenFile,
+        onCreateFile,
+        onCreateFolder,
+        onRename,
+        onDelete,
+    } = props;
 
     return (
         <aside
-            className={`bg-[#313328] border-r border-[#22241e] p-2.5 box-border flex flex-col gap-2 overflow-y-auto w-60 transition-all duration-300 ${
-                props.isOpen ? 'ml-0' : '-ml-60'
+            className={`bg-[#313328] border-r border-[#22241e] flex flex-col w-60 transition-all duration-300 overflow-y-auto ${
+                isOpen ? 'ml-0' : '-ml-60'
             }`}
         >
-            <button onClick={props.onUndo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
-                UNDO
-            </button>
-            <button onClick={props.onRedo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
-                REDO
-            </button>
+            <Accordion title="File Explorer" defaultOpen>
+                <FileExplorer
+                    fileSystem={fileSystem}
+                    activePath={activePath}
+                    onOpenFile={onOpenFile}
+                    onCreateFile={onCreateFile}
+                    onCreateFolder={onCreateFolder}
+                    onRename={onRename}
+                    onDelete={onDelete}
+                />
+            </Accordion>
 
-            <div className="mt-5 text-xs text-[#999966]">
-                <p className="font-bold">Quantum Actions:</p>
-                <button
-                    onClick={() => props.onQuickAction('optimize')}
-                    className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
-                >
-                    Quantum Optimize
-                </button>
-                <button
-                    onClick={() => props.onQuickAction('document')}
-                    className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-1 p-1.5 rounded"
-                >
-                    Fractal Document
-                </button>
-                <button
-                    onClick={() => props.onQuickAction('refactor')}
-                    className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-1 p-1.5 rounded"
-                >
-                    Hyper Refactor
-                </button>
-                <button
-                    onClick={props.onAnalyzeSelection}
-                    className="bg-[#5bc0de] hover:bg-cyan-400 text-white text-xs w-full text-left mt-1 p-1.5 rounded"
-                >
-                    Analyze Selection
-                </button>
-                <button
-                    onClick={props.onRunOrchestrator}
-                    className="bg-[#4ac94a] hover:bg-green-400 text-white text-xs w-full text-left mt-1 p-1.5 rounded"
-                >
-                    Multi-Agent Consensus
-                </button>
-            </div>
-
-            <div className="mt-5 text-xs text-[#999966]">
-                <p className="font-bold">Local Drafts:</p>
-                <button
-                    onClick={props.onSaveDraft}
-                    className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left mt-2 p-1.5 rounded"
-                >
-                    Save Draft
-                </button>
-                <button
-                    onClick={props.onLoadDraft}
-                    className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left mt-1 p-1.5 rounded"
-                >
-                    Load Draft
-                </button>
-            </div>
-
-            <div className="mt-5 text-xs text-[#999966]">
-                <p className="font-bold">Orchestrator Settings:</p>
-                <div className="mt-1">
-                    <label htmlFor="agent-count">Agent Count:</label>
-                    <input
-                        type="number"
-                        id="agent-count"
-                        min="2"
-                        max="8"
-                        value={props.settings.agentCount}
-                        onChange={(e) =>
-                            props.onSettingsChange({ ...props.settings, agentCount: parseInt(e.target.value) })
-                        }
-                        className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
-                    />
-                </div>
-                <div className="mt-1">
-                    <label htmlFor="max-rounds">Max Rounds:</label>
-                    <input
-                        type="number"
-                        id="max-rounds"
-                        min="1"
-                        max="10"
-                        value={props.settings.maxRounds}
-                        onChange={(e) =>
-                            props.onSettingsChange({ ...props.settings, maxRounds: parseInt(e.target.value) })
-                        }
-                        className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
-                    />
-                </div>
-            </div>
-
-            <div className="mt-5 text-xs text-[#999966]">
-                <p className="font-bold">Editor Settings:</p>
-                <div className="mt-1 flex items-center justify-between">
-                    <label htmlFor="font-size">Font Size (px):</label>
-                    <input
-                        type="number"
-                        id="font-size"
-                        min="8"
-                        max="24"
-                        value={props.editorFontSize}
-                        onChange={(e) => props.onFontSizeChange(parseInt(e.target.value, 10))}
-                        className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
-                    />
-                </div>
-            </div>
-
-            <div className="mt-5 text-xs text-[#999966]">
-                <button
-                    onClick={() => setIsHistoryOpen((prev) => !prev)}
-                    className="font-bold w-full text-left flex justify-between items-center p-1 rounded hover:bg-white/5"
-                >
-                    <span>Editor History</span>
-                    <span
-                        className="transition-transform duration-200"
-                        style={{ transform: isHistoryOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+            <Accordion title="Quantum Actions">
+                <div className="flex flex-col gap-1 pt-1">
+                    <button onClick={onUndo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
+                        UNDO
+                    </button>
+                    <button onClick={onRedo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
+                        REDO
+                    </button>
+                    <button
+                        onClick={() => onQuickAction('optimize')}
+                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
                     >
-                        ▼
-                    </span>
-                </button>
-                {isHistoryOpen && (
-                    <div className="mt-2 max-h-48 overflow-y-auto pr-1 border-l-2 border-gray-700 pl-2">
-                        {props.history
-                            .map((content, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => props.onRevertToState(index)}
-                                    title={content}
-                                    className={`w-full text-left p-1 rounded text-xs mt-1 truncate transition-colors ${
-                                        props.historyIndex === index
-                                            ? 'bg-[#4ac94a]/30 text-white font-semibold'
-                                            : 'bg-[#22241e]/50 hover:bg-[#a03333]'
-                                    }`}
-                                >
-                                    State {index + 1}: {content.substring(0, 30).replace(/\s+/g, ' ')}...
-                                </button>
-                            ))
-                            .reverse()}
+                        Quantum Optimize
+                    </button>
+                    <button
+                        onClick={() => onQuickAction('document')}
+                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Fractal Document
+                    </button>
+                    <button
+                        onClick={() => onQuickAction('refactor')}
+                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Hyper Refactor
+                    </button>
+                    <button
+                        onClick={onCodeReview}
+                        className="bg-[#a033a0] hover:bg-[#6c236c] text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        AI Code Review
+                    </button>
+                    <button
+                        onClick={onAnalyzeSelection}
+                        className="bg-[#5bc0de] hover:bg-cyan-400 text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Analyze Selection
+                    </button>
+                    <button
+                        onClick={onRunOrchestrator}
+                        className="bg-[#4ac94a] hover:bg-green-400 text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Multi-Agent Consensus
+                    </button>
+                </div>
+            </Accordion>
+
+            <Accordion title="Local Drafts">
+                <div className="flex flex-col gap-1 pt-1">
+                    <button
+                        onClick={onSaveDraft}
+                        className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Save Draft
+                    </button>
+                    <button
+                        onClick={onLoadDraft}
+                        className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded"
+                    >
+                        Load Draft
+                    </button>
+                </div>
+            </Accordion>
+
+            <Accordion title="Orchestrator Settings">
+                <div className="pt-1">
+                    <div className="mt-1">
+                        <label htmlFor="agent-count">Agent Count:</label>
+                        <input
+                            type="number"
+                            id="agent-count"
+                            min="2"
+                            max="8"
+                            value={settings.agentCount}
+                            onChange={(e) =>
+                                onSettingsChange({ ...settings, agentCount: parseInt(e.target.value) })
+                            }
+                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                        />
                     </div>
-                )}
-            </div>
+                    <div className="mt-1">
+                        <label htmlFor="max-rounds">Max Rounds:</label>
+                        <input
+                            type="number"
+                            id="max-rounds"
+                            min="1"
+                            max="10"
+                            value={settings.maxRounds}
+                            onChange={(e) =>
+                                onSettingsChange({ ...settings, maxRounds: parseInt(e.target.value) })
+                            }
+                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                        />
+                    </div>
+                </div>
+            </Accordion>
+
+            <Accordion title="Editor Settings">
+                <div className="pt-1">
+                    <div className="mt-1 flex items-center justify-between">
+                        <label htmlFor="font-size">Font Size (px):</label>
+                        <input
+                            type="number"
+                            id="font-size"
+                            min="8"
+                            max="24"
+                            value={editorFontSize}
+                            onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
+                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                        />
+                    </div>
+                </div>
+            </Accordion>
+
+            <Accordion title="Editor History">
+                <div className="max-h-48 overflow-y-auto pr-1 border-l-2 border-gray-700 pl-2">
+                    {history
+                        .map((content, index) => (
+                            <button
+                                key={index}
+                                onClick={() => onRevertToState(index)}
+                                title={content}
+                                className={`w-full text-left p-1 rounded text-xs mt-1 truncate transition-colors ${
+                                    historyIndex === index
+                                        ? 'bg-[#4ac94a]/30 text-white font-semibold'
+                                        : 'bg-[#22241e]/50 hover:bg-[#a03333]'
+                                }`}
+                            >
+                                State {index + 1}: {content.substring(0, 30).replace(/\s+/g, ' ')}...
+                            </button>
+                        ))
+                        .reverse()}
+                </div>
+            </Accordion>
         </aside>
     );
 };
@@ -345,7 +512,7 @@ interface PreviewPanelProps {
 }
 
 /**
- * Renders a panel to show a live preview of HTML content.
+ * Renders a floating, draggable, and resizable panel to show a live preview of HTML content.
  * The content is sandboxed and loaded via the `srcDoc` attribute for security and live updates.
  * @param {PreviewPanelProps} props - The component props.
  * @param {string} props.htmlContent - The HTML string to be rendered in the iframe.
@@ -353,13 +520,100 @@ interface PreviewPanelProps {
  * @returns {React.ReactElement} The rendered preview panel.
  */
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose }) => {
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [size, setSize] = useState({ width: 0, height: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+    const panelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        // Center panel on initial render
+        const initialWidth = window.innerWidth * 0.92;
+        const initialHeight = window.innerHeight * 0.88;
+        setSize({ width: initialWidth, height: initialHeight });
+        setPosition({
+            x: (window.innerWidth - initialWidth) / 2,
+            y: (window.innerHeight - initialHeight) / 2,
+        });
+    }, []);
+
+    const handleDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isResizing) return;
+        setIsDragging(true);
+        const panel = panelRef.current;
+        if (panel) {
+            const initialX = e.clientX - panel.offsetLeft;
+            const initialY = e.clientY - panel.offsetTop;
+
+            const handleDragMove = (moveEvent: MouseEvent) => {
+                setPosition({
+                    x: moveEvent.clientX - initialX,
+                    y: moveEvent.clientY - initialY,
+                });
+            };
+
+            const handleDragEnd = () => {
+                window.removeEventListener('mousemove', handleDragMove);
+                window.removeEventListener('mouseup', handleDragEnd);
+                setIsDragging(false);
+            };
+
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
+        }
+    };
+
+    const handleResizeStart = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.stopPropagation();
+        setIsResizing(true);
+        const panel = panelRef.current;
+        if (panel) {
+            const initialWidth = panel.offsetWidth;
+            const initialHeight = panel.offsetHeight;
+            const initialMouseX = e.clientX;
+            const initialMouseY = e.clientY;
+
+            const handleResizeMove = (moveEvent: MouseEvent) => {
+                const dx = moveEvent.clientX - initialMouseX;
+                const dy = moveEvent.clientY - initialMouseY;
+                setSize({
+                    width: Math.max(300, initialWidth + dx), // min width
+                    height: Math.max(200, initialHeight + dy), // min height
+                });
+            };
+
+            const handleResizeEnd = () => {
+                window.removeEventListener('mousemove', handleResizeMove);
+                window.removeEventListener('mouseup', handleResizeEnd);
+                setIsResizing(false);
+            };
+
+            window.addEventListener('mousemove', handleResizeMove);
+            window.addEventListener('mouseup', handleResizeEnd);
+        }
+    };
+
     return (
-        <div className="flex flex-col flex-1 bg-white border-l-2 border-[#22241e] min-w-[300px]">
-            <div className="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a] flex-shrink-0">
-                <span>Live Preview</span>
+        <div
+            ref={panelRef}
+            style={{
+                position: 'fixed',
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+                width: `${size.width}px`,
+                height: `${size.height}px`,
+                zIndex: 100,
+            }}
+            className="flex flex-col bg-white border-2 border-[#4ac94a] shadow-2xl rounded-lg overflow-hidden"
+        >
+            <div
+                onMouseDown={handleDragStart}
+                className="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a] flex-shrink-0 cursor-move"
+            >
+                <span className="font-bold">Live Preview</span>
                 <button
                     onClick={onClose}
-                    className="text-xl leading-none text-gray-400 hover:text-white transition-colors"
+                    className="text-xl leading-none text-gray-400 hover:text-white transition-colors cursor-pointer"
                 >
                     &times;
                 </button>
@@ -370,6 +624,11 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
                 className="w-full h-full border-none"
                 sandbox="allow-scripts"
             ></iframe>
+            <div
+                onMouseDown={handleResizeStart}
+                className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+                style={{ zIndex: 101 }}
+            />
         </div>
     );
 };
@@ -512,7 +771,7 @@ const highlight = (text: string, language: string): string => {
 
 const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => {
     const codeBlockRegex = /```(\w+)?\n([\s\S]+?)```/g;
-    const parts = [];
+    const parts: { type: 'text' | 'code'; content: string; language?: string }[] = [];
     let lastIndex = 0;
     let match;
 
@@ -540,7 +799,7 @@ const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => 
                 if (part.type === 'code') {
                     return (
                         <pre key={index} className="bg-black/30 rounded p-2 my-1 overflow-x-auto text-xs">
-                            <code dangerouslySetInnerHTML={{ __html: highlight(part.content, part.language) }} />
+                            <code dangerouslySetInnerHTML={{ __html: highlight(part.content, part.language!) }} />
                         </pre>
                     );
                 }

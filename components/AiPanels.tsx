@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { AiState, Agent, Consensus, GroundingChunk } from '../types';
+import type { AiState, Agent, Consensus, GroundingChunk, CodeReviewFinding } from '../types';
 
 /**
  * Determines the inline CSS styles for an AgentCard based on its status.
@@ -259,6 +259,87 @@ const highlightMatches = (text: string, query: string): string => {
     return escapedText.replace(regex, `<mark class="bg-yellow-500/50 rounded px-0.5">$1</mark>`);
 };
 
+/**
+ * A panel that displays the results of an AI code review.
+ * It lists all the findings from the AI, categorized by severity,
+ * and provides actionable suggestions for each.
+ * @param {{ findings: CodeReviewFinding[] }} props - Component props containing the array of review findings.
+ * @returns {React.ReactElement} The rendered code review panel.
+ */
+const CodeReviewPanel: React.FC<{ findings: CodeReviewFinding[] }> = ({ findings }) => {
+    const severityStyles = {
+        Critical: {
+            icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
+            color: 'text-red-400',
+            borderColor: 'border-red-500',
+        },
+        Warning: {
+            icon: 'M20.944 15.006L13.52 3.29A2 2 0 0011.808 2H12a2 2 0 00-1.789 1.144L2.981 15.14A2 2 0 004.69 18h14.62a2 2 0 001.634-2.994zM12 6a1 1 0 011 1v4a1 1 0 01-2 0V7a1 1 0 011-1zm1 9a1 1 0 11-2 0 1 1 0 012 0z',
+            color: 'text-yellow-400',
+            borderColor: 'border-yellow-500',
+        },
+        Suggestion: {
+            icon: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+            color: 'text-sky-400',
+            borderColor: 'border-sky-500',
+        },
+    };
+
+    if (findings.length === 0) {
+        return (
+            <div className="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4 text-center">
+                <div className="flex items-center gap-2 justify-center font-bold text-green-400 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path
+                            fillRule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                            clipRule="evenodd"
+                        />
+                    </svg>
+                    <span>No Issues Found</span>
+                </div>
+                <p className="text-xs text-gray-400">The AI reviewer analyzed the code and found no issues to report.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4">
+            <div className="font-bold text-purple-400 mb-3 text-sm">AI Code Review Findings</div>
+            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                {findings.map((finding, i) => {
+                    const style = severityStyles[finding.severity] || severityStyles.Suggestion;
+                    return (
+                        <div key={i} className={`finding-item bg-white/5 rounded p-2.5 border-l-4 ${style.borderColor}`}>
+                            <div className="flex items-center gap-3 mb-1.5">
+                                <div className={`flex items-center gap-1.5 font-bold text-xs ${style.color}`}>
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        className="h-4 w-4 flex-shrink-0"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={style.icon} />
+                                    </svg>
+                                    {finding.severity}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                    <span className="font-semibold">Line:</span> {finding.line_number}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                    <span className="font-semibold">Category:</span> {finding.category}
+                                </div>
+                            </div>
+                            <p className="text-xs text-slate-300 whitespace-pre-wrap">{finding.suggestion}</p>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 interface AiResponsePanelProps {
     isOpen: boolean;
     aiState: AiState;
@@ -368,7 +449,9 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                     <AgentCard key={agent.name} agent={agent} />
                 ))}
 
-                {codeToActOn && (
+                {aiState.codeReviewFindings ? (
+                    <CodeReviewPanel findings={aiState.codeReviewFindings} />
+                ) : codeToActOn ? (
                     <div className="code-container bg-black/30 rounded-lg mt-4 border border-gray-700 flex flex-col">
                         <div className="flex items-center justify-between p-2 border-b border-gray-700 bg-black/20">
                             <div className="flex gap-1">
@@ -425,7 +508,7 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                             </button>
                         </div>
                     </div>
-                )}
+                ) : null}
 
                 {filteredConsensus && filteredConsensus.allCandidates.length > 0 && (
                     <ConsensusPanel consensus={filteredConsensus} />

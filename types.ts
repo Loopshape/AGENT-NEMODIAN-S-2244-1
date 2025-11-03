@@ -20,12 +20,20 @@ export interface GroundingChunk {
     };
 }
 
+export interface CodeReviewFinding {
+    line_number: number;
+    severity: 'Critical' | 'Warning' | 'Suggestion';
+    category: 'Bug' | 'Security' | 'Style' | 'Performance';
+    suggestion: string;
+}
+
 export interface AiState {
     agents: Agent[];
     isLoading: boolean;
     consensus: Consensus | null;
     generatedCode: string | null;
     groundingChunks: GroundingChunk[] | null;
+    codeReviewFindings: CodeReviewFinding[] | null;
 }
 
 export interface EditorStats {
@@ -66,3 +74,16 @@ export interface TerminalLine {
     type: 'input' | 'output' | 'error' | 'system' | 'help';
     content: string;
 }
+
+// --- File System Types for Explorer ---
+export interface FileNode {
+    type: 'file';
+    content: string;
+}
+
+export interface FolderNode {
+    type: 'folder';
+    children: Record<string, FileSystemNode>;
+}
+
+export type FileSystemNode = FileNode | FolderNode;

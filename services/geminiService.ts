@@ -1,6 +1,6 @@
 
-import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
-import type { Candidate, Persona } from '../types';
+import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
+import type { Candidate, Persona, CodeReviewFinding, GroundingChunk } from '../types';
 
 const API_KEY = process.env.API_KEY;
 
@@ -11,16 +11,21 @@ if (!API_KEY) {
 const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
 /**
- * Generates content as a stream with the "thinking" feature enabled.
+ * Generates content as a stream with the "thinking" feature enabled and processes the stream.
  * This provides a more detailed, step-by-step generation process for complex tasks.
- * The system prompt primes the AI to act as a world-class software architect.
+ * It calls a callback function on each chunk to allow for real-time UI updates.
  * @param {string} prompt - The user's specific request.
  * @param {string} context - The current code or context from the editor.
  * @param {boolean} withSearch - Whether to enable Google Search grounding for the request.
- * @returns {Promise<AsyncGenerator<GenerateContentResponse>>} A promise that resolves with an async iterable stream of generated content chunks.
+ * @param {(update: { code: string; groundingChunks?: GroundingChunk[] }) => void} onUpdate - Callback for each stream update.
+ * @returns {Promise<void>} A promise that resolves when the stream is fully processed.
  */
-// FIX: Make the function async to ensure proper promise type inference for the stream.
-export const generateWithThinkingStream = async (prompt: string, context: string, withSearch: boolean) => {
+export const generateWithThinkingStream = async (
+    prompt: string,
+    context: string,
+    withSearch: boolean,
+    onUpdate: (update: { code: string; groundingChunks?: GroundingChunk[] }) => void
+): Promise<void> => {
     const fullPrompt = `You are a world-class software architect and principal engineer, an expert in complex algorithms and system design. Your mission is to generate, refactor, or optimize code to solve sophisticated algorithmic challenges.
 Internally, you must deconstruct the problem, think step-by-step, consider various data structures, analyze time and space complexity, and anticipate edge cases to architect the most robust and performant solution.
 
@@ -42,11 +47,45 @@ Produce only the final, complete, and production-ready code block as your respon
         config.tools = [{ googleSearch: {} }];
     }
 
-    return ai.models.generateContentStream({
+    const stream = await ai.models.generateContentStream({
         model: 'gemini-2.5-pro',
         contents: fullPrompt,
         config: config,
     });
+
+    let accumulatedCode = '';
+    let allGroundingChunks: GroundingChunk[] = [];
+
+    for await (const chunk of stream) {
+        try {
+            // Ensure chunk text is valid before appending
+            const text = chunk.text;
+            if (typeof text === 'string') {
+                accumulatedCode += text;
+            } else if (text != null) {
+                console.warn('Received a stream chunk with non-string text content:', chunk);
+            }
+
+            // Safely process grounding chunks
+            const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
+            if (Array.isArray(newChunks)) {
+                newChunks.forEach((newChunk: GroundingChunk) => {
+                    if (newChunk?.web?.uri && !allGroundingChunks.some((existing) => existing.web?.uri === newChunk.web?.uri)) {
+                        allGroundingChunks.push(newChunk);
+                    }
+                });
+            }
+
+            // Provide the latest state to the caller
+            onUpdate({
+                code: accumulatedCode,
+                groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : undefined,
+            });
+        } catch (error) {
+            console.error('Error processing stream chunk. The stream will continue.', { error, chunk });
+            // This ensures a single malformed chunk doesn't stop the entire process
+        }
+    }
 };
 
 /**
@@ -189,4 +228,76 @@ Produce only the final, complete, and production-ready code block as your respon
             score: data.count + (Math.random() * 2 + 5) * 0.1,
         }))
         .sort((a, b) => b.score - a.score);
+};
+
+/**
+ * Analyzes a block of code for potential issues and provides structured feedback.
+ * The AI is prompted to act as an expert code reviewer, focusing on bugs, security,
+ * style, and performance, and to return its findings in a specific JSON format.
+ * @param {string} codeContent - The code to be reviewed.
+ * @returns {Promise<CodeReviewFinding[]>} A promise that resolves to an array of code review findings.
+ */
+export const runCodeReview = async (codeContent: string): Promise<CodeReviewFinding[]> => {
+    const prompt = `You are a world-class AI code reviewer with deep expertise in identifying bugs, security vulnerabilities, style inconsistencies, and performance bottlenecks.
+Analyze the following code meticulously. For each issue you find, provide a concise and actionable suggestion.
+Do not comment on correct code. Only report issues that need attention.
+
+Code to review:
+\`\`\`
+${codeContent}
+\`\`\`
+
+Return your findings as a JSON object that adheres to the provided schema.
+`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-pro',
+        contents: prompt,
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    findings: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                line_number: {
+                                    type: Type.INTEGER,
+                                    description: 'The line number where the issue occurs.',
+                                },
+                                severity: {
+                                    type: Type.STRING,
+                                    description: 'The severity of the issue. Must be one of: Critical, Warning, Suggestion.',
+                                },
+                                category: {
+                                    type: Type.STRING,
+                                    description:
+                                        'The category of the issue. Must be one of: Bug, Security, Style, Performance.',
+                                },
+                                suggestion: {
+                                    type: Type.STRING,
+                                    description: 'A clear, actionable suggestion to fix the issue.',
+                                },
+                            },
+                            required: ['line_number', 'severity', 'category', 'suggestion'],
+                        },
+                    },
+                },
+                required: ['findings'],
+            },
+        },
+    });
+
+    try {
+        const jsonResponse = JSON.parse(response.text);
+        if (jsonResponse && Array.isArray(jsonResponse.findings)) {
+            return jsonResponse.findings as CodeReviewFinding[];
+        }
+        return [];
+    } catch (e) {
+        console.error('Failed to parse code review response:', e);
+        throw new Error('Could not parse AI code review response.');
+    }
 };

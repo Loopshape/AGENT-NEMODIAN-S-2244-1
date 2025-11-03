@@ -9,27 +9,64 @@ import type {
     Persona,
     GroundingChunk,
     TerminalLine,
+    CodeReviewFinding,
+    FolderNode,
+    FileSystemNode,
+    // FIX: Import FileNode type for use in type assertion.
+    FileNode,
 } from './types';
 import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './components/ui';
 import { Editor } from './components/Editor';
 import { AiResponsePanel } from './components/AiPanels';
 import { PromptModal } from './components/PromptModal';
-import { generateWithThinkingStream, runMultiAgentConsensus, personas } from './services/geminiService';
+import { generateWithThinkingStream, runMultiAgentConsensus, personas, runCodeReview } from './services/geminiService';
+import { get, set, unset } from './utils/fsHelpers';
 
-const INITIAL_CONTENT = `<!DOCTYPE html>
+const INITIAL_FILES: FolderNode = {
+    type: 'folder',
+    children: {
+        'index.html': {
+            type: 'file',
+            content: `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quantum Fractal AI Demo</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Fractal AI Project</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div class="container">
     <h1>Welcome to Quantum Fractal AI</h1>
-    <p>This is a demonstration of the quantum fractal AI editor's capabilities.</p>
-  </div>
+    <p>Edit this project and see the live preview.</p>
+    <script src="js/main.js"></script>
 </body>
-</html>`;
+</html>`,
+        },
+        'css': {
+            type: 'folder',
+            children: {
+                'style.css': {
+                    type: 'file',
+                    content: `body {
+    font-family: sans-serif;
+    background-color: #f0f0f0;
+    color: #333;
+    padding: 2rem;
+}`,
+                },
+            },
+        },
+        'js': {
+            type: 'folder',
+            children: {
+                'main.js': {
+                    type: 'file',
+                    content: `console.log('Quantum Fractal AI project loaded.');`,
+                },
+            },
+        },
+    },
+};
 
 const initialAgentState: Agent[] = [
     {
@@ -81,10 +118,11 @@ export type AiMode = 'ai' | 'orchestrator';
  * Determines the syntax highlighting language based on a file extension.
  * Maps common extensions to language identifiers supported by the editor's tokenizer.
  * Defaults to 'plaintext' if the extension is not recognized.
- * @param {string} extension - The file extension (e.g., 'js', 'html').
+ * @param {string} path - The file path (e.g., '/src/index.js').
  * @returns {string} The corresponding language identifier.
  */
-const getLanguageFromExtension = (extension: string): string => {
+const getLanguageFromPath = (path: string): string => {
+    const extension = path.split('.').pop() || '';
     const langMap: Record<string, string> = {
         js: 'js',
         jsx: 'js',
@@ -107,9 +145,9 @@ const getLanguageFromExtension = (extension: string): string => {
 };
 
 const HELP_TEXT = `Quantum Fractal AI Terminal Commands:
-- run <prompt> [--search]: Executes a Quantum AI task. Use quotes for multi-word prompts.
+- run <prompt> [--search]: Executes a Quantum AI task on the currently open file. Use quotes for multi-word prompts.
     --search: Enables Google Search grounding for up-to-date information.
-- orch <prompt> --agents <agent1>,<agent2>,...: Runs a Multi-Agent Consensus task.
+- orch <prompt> --agents <agent1>,<agent2>,...: Runs a Multi-Agent Consensus task on the open file.
     --agents: A comma-separated list of agent personas to use (e.g., "Performance Optimizer,Code Readability Advocate").
 - apply: Applies the last generated code from the terminal to the editor.
 - clear: Clears the terminal history.
@@ -122,11 +160,15 @@ const HELP_TEXT = `Quantum Fractal AI Terminal Commands:
  * @returns {React.ReactElement} The rendered application.
  */
 const App: React.FC = () => {
-    const [editorContent, setEditorContent] = useState<string>(INITIAL_CONTENT);
-    const [fileName, setFileName] = useState<string>('untitled.html');
+    const [fileSystem, setFileSystem] = useState<FolderNode>(INITIAL_FILES);
+    const [activeFilePath, setActiveFilePath] = useState<string | null>('/index.html');
+
+    // FIX: Use a type assertion to safely access the `.content` property on the initial file node.
+    const [editorContent, setEditorContent] = useState<string>((INITIAL_FILES.children['index.html'] as FileNode).content);
+    const [fileName, setFileName] = useState<string>('index.html');
     const [fileType, setFileType] = useState<string>('html');
 
-    const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(false);
+    const [isLeftPanelOpen, setIsLeftPanelOpen] = useState(true);
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
@@ -138,7 +180,7 @@ const App: React.FC = () => {
         snippet?: string;
     } | null>(null);
 
-    const [history, setHistory] = useState<string[]>([INITIAL_CONTENT]);
+    const [history, setHistory] = useState<string[]>([editorContent]);
     const [historyIndex, setHistoryIndex] = useState(0);
 
     const [stats, setStats] = useState<EditorStats>({ cursor: '1:0', lines: 0, chars: 0, history: 1 });
@@ -148,12 +190,13 @@ const App: React.FC = () => {
         consensus: null,
         generatedCode: null,
         groundingChunks: null,
+        codeReviewFindings: null,
     });
     const [orchestratorSettings, setOrchestratorSettings] = useState<OrchestratorSettings>({
         agentCount: 4,
         maxRounds: 3,
     });
-    const [editorFontSize, setEditorFontSize] = useState<number>(9);
+    const [editorFontSize, setEditorFontSize] = useState<number>(11);
     const [originalCodeForDiff, setOriginalCodeForDiff] = useState<string>('');
     const [terminalHistory, setTerminalHistory] = useState<TerminalLine[]>([
         { type: 'system', content: 'Quantum Fractal AI Terminal Initialized. Type "help" for commands.' },
@@ -221,6 +264,7 @@ const App: React.FC = () => {
                 consensus: null,
                 generatedCode: null,
                 groundingChunks: null,
+                codeReviewFindings: null,
             });
 
             try {
@@ -249,28 +293,20 @@ const App: React.FC = () => {
                         await new Promise((r) => setTimeout(r, 200));
                         updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
                     }
-                    const stream = await runAgentFlow(() =>
-                        generateWithThinkingStream(currentPrompt, fullContext, useSearch)
+                    await runAgentFlow(() =>
+                        generateWithThinkingStream(
+                            currentPrompt,
+                            fullContext,
+                            useSearch,
+                            (update) => {
+                                setAiState((prev) => ({
+                                    ...prev,
+                                    generatedCode: update.code,
+                                    groundingChunks: update.groundingChunks || null,
+                                }));
+                            }
+                        )
                     );
-                    let code = '';
-                    let allGroundingChunks: GroundingChunk[] = [];
-
-                    for await (const chunk of stream) {
-                        code += chunk.text;
-                        const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
-                        if (newChunks) {
-                            newChunks.forEach((newChunk: GroundingChunk) => {
-                                if (!allGroundingChunks.some((existing) => existing.web?.uri === newChunk.web?.uri)) {
-                                    allGroundingChunks.push(newChunk);
-                                }
-                            });
-                        }
-                        setAiState((prev) => ({
-                            ...prev,
-                            generatedCode: code,
-                            groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : null,
-                        }));
-                    }
 
                     if (useSearch) {
                         await new Promise((r) => setTimeout(r, 200));
@@ -296,15 +332,26 @@ const App: React.FC = () => {
 
     const handleSetContent = useCallback(
         (newContent: string) => {
-            // Prevent adding duplicate states to history
-            if (newContent === history[historyIndex]) return;
+            // Update file system state
+            if (activeFilePath) {
+                setFileSystem((prevFs) => {
+                    const newFs = { ...prevFs };
+                    const node = get(newFs, activeFilePath);
+                    if (node && node.type === 'file') {
+                        return set(newFs, activeFilePath, { ...node, content: newContent });
+                    }
+                    return prevFs;
+                });
+            }
 
+            // Update editor state and history
+            if (newContent === history[historyIndex]) return;
             const newHistory = [...history.slice(0, historyIndex + 1), newContent];
             setHistory(newHistory);
             setHistoryIndex(newHistory.length - 1);
             setEditorContent(newContent);
         },
-        [history, historyIndex]
+        [activeFilePath, history, historyIndex]
     );
 
     const handleCommandSubmit = async (command: string) => {
@@ -346,11 +393,11 @@ const App: React.FC = () => {
                 const useSearch = args.includes('--search');
                 addToHistory('system', 'Invoking Quantum AI...');
                 try {
-                    const stream = await generateWithThinkingStream(prompt, editorContent, useSearch);
                     let result = '';
-                    for await (const chunk of stream) {
-                        result += chunk.text;
-                    }
+                    await generateWithThinkingStream(prompt, editorContent, useSearch, (update) => {
+                        result = update.code;
+                        // We don't display chunks in terminal, just get final code
+                    });
                     setLastTerminalResult(result);
                     addToHistory('output', result);
                 } catch (e) {
@@ -397,7 +444,7 @@ const App: React.FC = () => {
         if (historyIndex > 0) {
             const newIndex = historyIndex - 1;
             setHistoryIndex(newIndex);
-            setEditorContent(history[newIndex]);
+            handleSetContent(history[newIndex]);
         }
     };
 
@@ -405,14 +452,14 @@ const App: React.FC = () => {
         if (historyIndex < history.length - 1) {
             const newIndex = historyIndex + 1;
             setHistoryIndex(newIndex);
-            setEditorContent(history[newIndex]);
+            handleSetContent(history[newIndex]);
         }
     };
 
     const handleRevertToState = (index: number) => {
         if (index >= 0 && index < history.length) {
             setHistoryIndex(index);
-            setEditorContent(history[index]);
+            handleSetContent(history[index]);
         }
     };
 
@@ -429,7 +476,7 @@ const App: React.FC = () => {
     };
 
     const handleQuickAction = async (action: 'optimize' | 'document' | 'refactor') => {
-        if (aiState.isLoading) return;
+        if (aiState.isLoading || !activeFilePath) return;
 
         const prompts = {
             optimize: 'Apply quantum fractal optimization to this code. Return only the complete, updated code block.',
@@ -450,19 +497,62 @@ const App: React.FC = () => {
             consensus: null,
             generatedCode: null,
             groundingChunks: null,
+            codeReviewFindings: null,
         });
 
         try {
-            const stream = await runAgentFlow(() => generateWithThinkingStream(currentPrompt, fullContext, false));
-            let code = '';
-            for await (const chunk of stream) {
-                code += chunk.text;
-                setAiState((prev) => ({ ...prev, generatedCode: code }));
-            }
+            await runAgentFlow(() =>
+                generateWithThinkingStream(
+                    currentPrompt,
+                    fullContext,
+                    false,
+                    (update) => {
+                        setAiState((prev) => ({ ...prev, generatedCode: update.code }));
+                    }
+                )
+            );
             updateAgent('echo', { status: 'done', content: `Quick Action '${action}' complete.` });
         } catch (error) {
             console.error('Gemini API Error:', error);
             updateAgent('echo', { status: 'error', content: `Quantum Error: ${(error as Error).message}` });
+        } finally {
+            setAiState((prev) => ({ ...prev, isLoading: false }));
+        }
+    };
+
+    const handleCodeReview = async () => {
+        if (aiState.isLoading || !activeFilePath) return;
+
+        setIsAiPanelOpen(true);
+        setAiState({
+            agents: initialAgentState,
+            isLoading: true,
+            consensus: null,
+            generatedCode: null,
+            groundingChunks: null,
+            codeReviewFindings: [],
+        });
+
+        try {
+            updateAgent('nexus', { status: 'working', content: 'Initiating quantum code review...' });
+            await new Promise((r) => setTimeout(r, 400));
+            updateAgent('cognito', { status: 'working', content: 'Analyzing code structure...' });
+            await new Promise((r) => setTimeout(r, 400));
+
+            const findings = await runCodeReview(editorContent);
+
+            updateAgent('cognito', { status: 'done', content: 'Analysis complete.' });
+            updateAgent('echo', { status: 'working', content: 'Compiling review...' });
+            await new Promise((r) => setTimeout(r, 400));
+
+            setAiState((prev) => ({ ...prev, codeReviewFindings: findings }));
+            updateAgent('echo', {
+                status: 'done',
+                content: `Code review complete. Found ${findings.length} issue(s).`,
+            });
+        } catch (error) {
+            console.error('Code Review Error:', error);
+            updateAgent('echo', { status: 'error', content: `Review Error: ${(error as Error).message}` });
         } finally {
             setAiState((prev) => ({ ...prev, isLoading: false }));
         }
@@ -478,45 +568,69 @@ const App: React.FC = () => {
         }
     };
 
-    const handleFileOpen = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.onchange = (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const content = ev.target?.result as string;
-                    handleSetContent(content);
-                    setFileName(file.name);
-                    const ext = file.name.split('.').pop() || 'txt';
-                    setFileType(getLanguageFromExtension(ext));
-                };
-                reader.readAsText(file, 'UTF-8');
-            }
-        };
-        input.click();
-    };
+    const handleOpenFile = useCallback((path: string) => {
+        const node = get(fileSystem, path);
+        if (node && node.type === 'file') {
+            setActiveFilePath(path);
+            setEditorContent(node.content);
+            setFileName(path.split('/').pop() || 'untitled');
+            setFileType(getLanguageFromPath(path));
+            setHistory([node.content]);
+            setHistoryIndex(0);
+        }
+    }, [fileSystem]);
 
-    const handleSaveFile = (as = false) => {
-        const currentFileName = as ? window.prompt('Save as...', fileName) : fileName;
-        if (!currentFileName) return;
+    const handleCreateFile = useCallback((path: string) => {
+        const fileName = prompt('Enter new file name:');
+        if (!fileName) return;
+        const newPath = `${path}/${fileName}`;
+        setFileSystem(fs => set(fs, newPath, { type: 'file', content: '' }));
+    }, []);
+    
+    const handleCreateFolder = useCallback((path: string) => {
+        const folderName = prompt('Enter new folder name:');
+        if (!folderName) return;
+        const newPath = `${path}/${folderName}`;
+        setFileSystem(fs => set(fs, newPath, { type: 'folder', children: {} }));
+    }, []);
 
-        const blob = new Blob([editorContent], { type: 'text/plain;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = currentFileName;
-        a.click();
-        URL.revokeObjectURL(a.href);
-        setFileName(currentFileName);
-        const ext = currentFileName.split('.').pop() || 'txt';
-        setFileType(getLanguageFromExtension(ext));
-    };
+    const handleRename = useCallback((path: string, newName: string) => {
+        const parts = path.split('/');
+        const oldName = parts.pop();
+        const parentPath = parts.join('/');
+        const newPath = `${parentPath}/${newName}`;
+
+        setFileSystem(fs => {
+            const nodeToMove = get(fs, path);
+            if (!nodeToMove) return fs;
+            const fsWithoutOld = unset(fs, path);
+            const fsWithNew = set(fsWithoutOld, newPath, nodeToMove);
+            return fsWithNew;
+        });
+
+        if (activeFilePath === path) {
+            setActiveFilePath(newPath);
+            setFileName(newName);
+            setFileType(getLanguageFromPath(newPath));
+        }
+    }, [activeFilePath]);
+
+    const handleDelete = useCallback((path: string) => {
+        if (!confirm(`Are you sure you want to delete "${path}"?`)) return;
+
+        setFileSystem(fs => unset(fs, path));
+
+        if (activeFilePath === path) {
+            setActiveFilePath(null);
+            setEditorContent('');
+            setFileName('No File Open');
+            setFileType('plaintext');
+        }
+    }, [activeFilePath]);
 
     const handleSaveDraft = () => {
         try {
             localStorage.setItem('quantum-editor-draft', editorContent);
-            // Simple feedback can be added here if needed, e.g., a toast notification.
         } catch (error) {
             console.error('Failed to save draft:', error);
             alert('Could not save draft. Local storage may be full or disabled.');
@@ -544,9 +658,6 @@ const App: React.FC = () => {
         >
             <Header
                 onToggleLeftPanel={() => setIsLeftPanelOpen((p) => !p)}
-                onOpenFile={handleFileOpen}
-                onSaveFile={() => handleSaveFile()}
-                onSaveAs={() => handleSaveFile(true)}
                 onTogglePreview={() => setIsPreviewOpen((p) => !p)}
                 isPreviewing={isPreviewOpen}
                 onRunAI={() => openPromptModal('ai')}
@@ -570,6 +681,14 @@ const App: React.FC = () => {
                     onFontSizeChange={setEditorFontSize}
                     onSaveDraft={handleSaveDraft}
                     onLoadDraft={handleLoadDraft}
+                    onCodeReview={handleCodeReview}
+                    fileSystem={fileSystem}
+                    activePath={activeFilePath}
+                    onOpenFile={handleOpenFile}
+                    onCreateFile={handleCreateFile}
+                    onCreateFolder={handleCreateFolder}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
                 />
                 <div className="flex flex-1 min-w-0">
                     <Editor
@@ -579,9 +698,6 @@ const App: React.FC = () => {
                         onStatsChange={handleStatsChange}
                         fontSize={editorFontSize}
                     />
-                    {isPreviewOpen && (
-                        <PreviewPanel htmlContent={editorContent} onClose={() => setIsPreviewOpen(false)} />
-                    )}
                 </div>
             </main>
             <Footer
@@ -589,6 +705,7 @@ const App: React.FC = () => {
                 isLoading={aiState.isLoading}
                 onToggleTerminal={() => setIsTerminalOpen((p) => !p)}
             />
+            {isPreviewOpen && <PreviewPanel htmlContent={editorContent} onClose={() => setIsPreviewOpen(false)} />}
             <AiResponsePanel
                 isOpen={isAiPanelOpen}
                 aiState={aiState}
