@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nemodian 2244-1 :: Ollama Termux Client (Refactored)</title>
+    <style>
+        /* CSS Variables for Deep Cyber Violet Theme */
+        :root {
+            --info: #7E57C2; 
+            --warn: #FF9800;
+            --error: #F44336;
+            --success: #66BB6A; 
+            --header-h: 48px;
+            --status-h: 24px;
+            --footer-h: 60px;
+            --font-size: 13px;
+            
+            --theme-bg: #16121D; 
+            --panel: #1E1925; 
+            --header-bg: #100D15; 
+            --status-bg: #0A080C; 
+            
+            --accent: #FF6600; /* Neon Orange */
+            --agent-nexus: #FFC300; /* Amber/Gold */
+            --hover-blue: #3366a0; 
+
+            --muted-text: #A79BBF; 
+            --err: #8D2A2A;
+            --text-color: #E6E0F1; 
+            --border-color: #3B3347; 
+            --editor-actions-h: 40px; 
+            --sidebar-w: 250px;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--theme-bg);
+            color: var(--text-color);
+            font-size: var(--font-size);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- Header & Status Bar --- */
+        #header {
+            height: var(--header-h);
+            background-color: var(--header-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.1em;
+            color: var(--agent-nexus); 
+            padding: 0 1em;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #status-bar {
+            height: var(--status-h);
+            background-color: var(--status-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 1em;
+            font-size: 0.9em;
+            color: var(--muted-text);
+            line-height: var(--status-h);
+            z-index: 9;
+        }
+
+        /* Status Colors */
+        .status-type-info { color: var(--info); }
+        .status-type-warn { color: var(--warn); background-color: var(--panel); }
+        .status-type-error { color: white; background-color: var(--err); padding: 0 0.5em;}
+        .status-type-success { color: var(--success); }
+        .status-type-agent-nexus { color: var(--agent-nexus); } 
+        .status-type-accent { color: var(--accent); } 
+
+        /* --- Main Layout: Editor Stage --- */
+        #editor-stage {
+            flex-grow: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* --- Left Panel (Sidebar) --- */
+        #left-panel {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background-color: var(--panel);
+            border-right: 1px solid var(--border-color);
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-sizing: border-box;
+            z-index: 20; 
+        }
+
+        /* Mobile specific sidebar overlay */
+        @media (max-width: 768px) {
+            #left-panel {
+                position: absolute;
+                height: 100%;
+                left: calc(-1 * var(--sidebar-w));
+                transition: left 0.3s ease-in-out;
+                width: 80%; /* Smaller width for mobile */
+                min-width: unset;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.8);
+            }
+            #editor-stage.left-panel-open #left-panel {
+                left: 0;
+            }
+        }
+        
+        /* --- Editor Container --- */
+        #editor-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative; /* Needed for filtering overlay */
+        }
+        
+        /* Mobile Overlay effect when sidebar is open */
+        #editor-stage.left-panel-open #editor-container::before {
+             content: '';
+             position: absolute;
+             top: 0;
+             left: 0;
+             right: 0;
+             bottom: 0;
+             background-color: rgba(0, 0, 0, 0.5);
+             z-index: 21; /* Above editor, below sidebar */
+             pointer-events: auto; /* Allow tap to close */
+             display: block;
+             opacity: 1;
+             transition: opacity 0.3s;
+             display: none; /* Hide by default on desktop */
+        }
+        
+        @media (max-width: 768px) {
+            #editor-stage.left-panel-open #editor-container::before {
+                 display: block; 
+            }
+        }
+
+        /* --- Editor Actions Bar --- */
+        #editor-actions {
+            height: var(--editor-actions-h);
+            min-height: var(--editor-actions-h);
+            background-color: var(--panel);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end; 
+            padding: 0 10px;
+        }
+
+        #btn-html-view {
+            background-color: var(--accent); 
+            color: var(--header-bg);
+            border: none;
+            padding: 5px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        #btn-html-view:hover { background-color: #FF8533; } 
+
+        /* --- Monospaced Editor Area --- */
+        #editor {
+            flex-grow: 1;
+            padding: 15px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: var(--font-size);
+            line-height: 1.5;
+            background-color: var(--theme-bg);
+            color: var(--text-color);
+            border: none;
+            resize: none;
+            outline: none;
+            white-space: pre;
+            overflow: auto;
+        }
+
+        /* --- Panel Controls Styling --- */
+        .panel-group-title {
+            color: var(--accent); 
+            font-weight: 600;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            padding: 5px 0;
+            border-bottom: 1px dashed var(--border-color);
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        #left-panel button {
+            background-color: var(--header-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 10px 12px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+            text-align: left;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            font-weight: 500;
+        }
+
+        #left-panel button:hover {
+            background-color: var(--hover-blue);
+            border-color: var(--info);
+            color: white;
+        }
+
+        /* --- Toggle Button --- */
+        #left-toggle {
+            background-color: var(--agent-nexus); 
+            color: var(--header-bg);
+            border: none;
+            padding: 5px 10px;
+            font-size: 1.2em;
+            line-height: 1;
+            margin-right: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            display: none; /* Hide by default on desktop */
+        }
+
+        @media (max-width: 768px) {
+            #left-toggle {
+                display: block; /* Show on mobile */
+            }
+        }
+        
+        /* --- Prompt Footer --- */
+        #prompt-footer {
+            height: var(--footer-h);
+            min-height: var(--footer-h);
+            background-color: var(--header-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0.5em 1em;
+            box-sizing: border-box;
+            gap: 10px;
+        }
+
+        #prompt-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background-color: var(--panel);
+            color: var(--text-color);
+            font-size: 1em;
+            resize: none;
+            height: calc(var(--footer-h) - 1em); 
+            box-sizing: border-box;
+            line-height: 1.4;
+            transition: border-color 0.2s;
+        }
+        
+        #prompt-submit {
+            background-color: var(--agent-nexus); 
+            color: var(--header-bg);
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            height: calc(var(--footer-h) - 1em);
+            box-sizing: border-box;
+        }
+
+        /* --- File List Styles --- */
+        #file-list {
+            margin-top: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            background-color: var(--header-bg);
+            color: var(--muted-text);
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            user-select: none;
+            border: 1px solid transparent;
+            position: relative;
+        }
+        .file-item.active {
+            background-color: var(--accent); 
+            color: var(--header-bg);
+            border-color: var(--agent-nexus);
+        }
+        .file-item:hover {
+            background-color: var(--panel);
+            color: var(--text-color);
+        }
+        
+        /* Class for Hold-to-Delete Feedback */
+        .file-item.holding-delete {
+            background-color: var(--err); 
+            color: white;
+            border-color: var(--error);
+        }
+
+        /* --- Modals (Simplified) --- */
+        #modal-overlay, #html-preview-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #modal-overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-content {
+            background-color: var(--panel);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            max-width: 350px;
+            width: 90%;
+            border: 1px solid var(--accent); 
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .modal-buttons button {
+            background-color: var(--header-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+            font-weight: bold;
+        }
+
+        /* --- HTML Preview Modal --- */
+        #html-preview-modal {
+            background-color: var(--theme-bg);
+            flex-direction: column;
+            z-index: 1010;
+        }
+
+        #preview-header {
+            height: var(--header-h);
+            background-color: var(--accent); 
+            color: var(--header-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        #btn-close-preview {
+            background: none;
+            border: none;
+            color: var(--header-bg);
+            font-size: 1.5em;
+            cursor: pointer;
+            padding: 5px;
+            line-height: 1;
+            transition: opacity 0.2s;
+        }
+
+        #preview-iframe {
+            flex-grow: 1;
+            width: 100%;
+            border: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <header id="header">
+        <button id="left-toggle">☰</button>
+        Nemodian 2244-1 :: Ollama Termux Client (v12.x)
+    </header>
+
+    <div id="status-bar">
+        Status: <span id="status-message">Willkommen zum Nemodian Editor. Initialisiere Ollama Routinen...</span>
+    </div>
+
+    <div id="editor-stage">
+
+        <!-- Linkes Bedienfeld mit Steuerungen (Sidebar) -->
+        <div id="left-panel">
+            
+            <div class="panel-group-title">Dateimanagement (Click to Load / Hold to Delete)</div>
+            <button id="btn-new-file" title="Erstellt eine neue leere Datei.">
+                + Neue Datei (Create)
+            </button>
+            <div id="file-list">
+                <!-- File items rendered here -->
+            </div>
+
+            <div class="panel-group-title">Ollama Client (v12.x) - Low-RAM Stream</div>
+            <button id="btn-generate" title="Simuliert einen LLM-Stream (Gemma 2B) auf Termux-Cache-Basis.">
+                Start Generate Stream
+            </button>
+            <button id="btn-list-models" title="Simuliert das Auflisten verfügbarer, lokal gecachter Modelle.">
+                List Cached Models
+            </button>
+            <button id="btn-pull-model" title="Simuliert das lokale Ziehen eines neuen Modells mit Stream-Feedback.">
+                Pull new Model (Llama3-8B)
+            </button>
+
+            <div class="panel-group-title">Konsensus-Tools</div>
+            <button id="btn-genesis-hash" title="Berechnet den konsolidierten SHA-256 Hash des aktuellen Editor-Inhalts (Genesis Hash).">
+                SHA-256 Gen-Hash
+            </button>
+
+            <div class="panel-group-title">Editor-Aktionen</div>
+            <button id="btn-undo">Rückgängig (Undo)</button>
+            <button id="btn-redo">Wiederherstellen (Redo)</button>
+            <button id="btn-beautify">Code verschönern (Beautify)</button>
+            <button id="btn-optimize" title="Simuliert die KI-Optimierung des aktuellen Codes (Effizienz, Speicher).">
+                Quantum Optimieren
+            </button>
+            <button id="btn-document" title="Simuliert die KI-Dokumentation des aktuellen Codes (Kommentare, README).">
+                Fraktal Dokumentieren
+            </button>
+            <button id="btn-refactor" title="Simuliert die KI-Refaktorierung des Codes in eine modulare Struktur.">
+                Relais Refaktorieren
+            </button>
+        </div>
+
+        <div id="editor-container">
+            <!-- Action Bar for Preview -->
+            <div id="editor-actions">
+                <button id="btn-html-view" title="Rendert den aktuellen Editor-Inhalt in einem separaten HTML-Ansichtsfenster.">
+                    HTML View
+                </button>
+            </div>
+            <textarea id="editor"></textarea>
+        </div>
+    </div>
+
+    <!-- Prompt Input Area -->
+    <footer id="prompt-footer">
+        <textarea id="prompt-input" placeholder="Geben Sie hier Ihren Ollama-Befehl ein (z.B. 'schreibe eine responsive HTML karte')..." rows="3"></textarea>
+        <button id="prompt-submit">Senden</button>
+    </footer>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title">Datei Löschen Bestätigung</h3>
+            <p>Sind Sie sicher, dass Sie die Datei <b id="file-to-delete-name"></b> unwiderruflich löschen möchten?</p>
+            <div class="modal-buttons">
+                <button id="btn-cancel-delete">Abbrechen</button>
+                <button id="btn-confirm-delete">Löschen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HTML Preview Modal -->
+    <div id="html-preview-modal">
+        <header id="preview-header">
+            <span>HTML-Build-Preview (Ollama Code)</span>
+            <button id="btn-close-preview">✕</button>
+        </header>
+        <iframe id="preview-iframe"></iframe>
+    </div>
+
+<script type="module">
+    
+    // --- Master Application Object ---
+    const NemodianApp = {
+        
+        // --- State Management ---
+        state: {
+            quantumEditor: null,
+            statusTimeout: null,
+            isStreaming: false, 
+            files: [],
+            currentFileId: null,
+            fileToDeleteId: null, 
+            
+            // Touch-Gesten-Variablen (Simplified for Click/Hold only)
+            GESTURE_HOLD_TIME: 1500, 
+            touchHoldTimer: null,
+        },
+
+        // --- Utils (Helper Functions) ---
+        utils: {
+            /**
+             * Funktion zur Aktualisierung der Statusleiste
+             */
+            updateStatus: (message, type = 'info', duration = 4000) => {
+                clearTimeout(NemodianApp.state.statusTimeout);
+                const statusBar = document.getElementById('status-bar');
+                const statusMessage = document.getElementById('status-message');
+
+                statusBar.className = '';
+                statusBar.classList.add(`status-type-${type}`);
+                statusMessage.textContent = message;
+
+                if (type !== 'streaming' && type !== 'accent' && type !== 'agent-nexus') {
+                    NemodianApp.state.statusTimeout = setTimeout(() => {
+                        statusBar.className = '';
+                        statusMessage.textContent = 'Bereit.';
+                    }, duration);
+                }
+            },
+            
+            // Hashing Helpers
+            bufferToHex: (buffer) => {
+                return Array.prototype.map.call(new Uint8Array(buffer), x => (
+                    ('00' + x.toString(16)).slice(-2)
+                )).join('');
+            },
+
+            calculateConsensusHash: async (inputData) => {
+                if (typeof crypto === 'undefined' || !crypto.subtle) {
+                    throw new Error("Krypto-API (SubtleCrypto) nicht verfügbar.");
+                }
+                const encoder = new TextEncoder();
+                const data = encoder.encode(inputData);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                return NemodianApp.utils.bufferToHex(hashBuffer);
+            },
+            
+            // Demo Content (moved here for cleanup)
+            demoHtmlContent: 
+`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Build: Simple Card</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full border-t-4 border-cyan-500">
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+            Ollama v12.x Generated Card
+        </h2>
+        <p class="text-gray-600 mb-4">
+            This HTML was streamed via the simulated Low-RAM Ollama process 
+            and is now ready for mobile preview. 
+        </p>
+        <button class="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold py-2 rounded-lg transition duration-200">
+            Action Button
+        </button>
+    </div>
+</body>
+</html>`
+        },
+        
+        // --- File Management Module ---
+        fileManager: {
+            init: () => {
+                NemodianApp.state.files = [
+                    { id: crypto.randomUUID(), name: 'Untitled.txt', content: '// Starten Sie mit einem Prompt, z.B. "erstelle eine responsive HTML karte"\n// Drücken Sie "Start Generate Stream" unten links.' },
+                    { id: crypto.randomUUID(), name: 'mobile_build_demo.html', content: NemodianApp.utils.demoHtmlContent }
+                ];
+                NemodianApp.fileManager.loadFile(NemodianApp.state.files[0].id);
+            },
+
+            loadFile: (id) => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Achtung: Warten auf Abschluss des Ollama-Streams.', 'warn');
+                    return;
+                }
+                
+                // Save content of the previously active file
+                NemodianApp.fileManager.saveCurrentFile(); 
+                
+                const file = NemodianApp.state.files.find(f => f.id === id);
+                if (file) {
+                    NemodianApp.state.currentFileId = id;
+                    NemodianApp.state.quantumEditor.setCode(file.content);
+                    NemodianApp.utils.updateStatus(`Datei geladen: ${file.name}`, 'info');
+                    NemodianApp.fileManager.renderFileList();
+                    document.title = `Nemodian 2244-1 :: ${file.name}`;
+                }
+            },
+
+            saveCurrentFile: () => {
+                const fileIndex = NemodianApp.state.files.findIndex(f => f.id === NemodianApp.state.currentFileId);
+                if (fileIndex !== -1) {
+                    NemodianApp.state.files[fileIndex].content = NemodianApp.state.quantumEditor.getCode();
+                }
+            },
+
+            newFile: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Achtung: Warten auf Abschluss des Ollama-Streams.', 'warn');
+                    return;
+                }
+
+                NemodianApp.fileManager.saveCurrentFile();
+
+                const newId = crypto.randomUUID();
+                const newFile = {
+                    id: newId,
+                    name: `New_Script_${NemodianApp.state.files.length + 1}.txt`,
+                    content: '<!-- Neuer Ollama-Generierungs-Prompt -->'
+                };
+                NemodianApp.state.files.push(newFile);
+                NemodianApp.fileManager.loadFile(newId);
+                NemodianApp.utils.updateStatus(`Neue Datei erstellt: ${newFile.name}`, 'success');
+            },
+
+            deleteFile: (id) => {
+                const index = NemodianApp.state.files.findIndex(f => f.id === id);
+                if (index !== -1) {
+                    const deletedFileName = NemodianApp.state.files[index].name;
+                    NemodianApp.state.files.splice(index, 1);
+                    NemodianApp.utils.updateStatus(`Datei gelöscht: ${deletedFileName}`, 'error');
+
+                    if (NemodianApp.state.currentFileId === id) {
+                        if (NemodianApp.state.files.length > 0) {
+                            NemodianApp.fileManager.loadFile(NemodianApp.state.files[0].id);
+                        } else {
+                            NemodianApp.state.currentFileId = null;
+                            NemodianApp.state.quantumEditor.setCode('');
+                            document.title = 'Nemodian 2244-1 :: Ollama Termux Client (v12.x)';
+                            NemodianApp.utils.updateStatus('Alle Dateien gelöscht. Bitte erstellen Sie eine neue Datei.', 'warn');
+                        }
+                    }
+                    NemodianApp.fileManager.renderFileList();
+                }
+            },
+
+            renderFileList: () => {
+                const fileList = document.getElementById('file-list');
+                fileList.innerHTML = ''; 
+
+                NemodianApp.state.files.forEach(file => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    item.textContent = file.name;
+                    item.setAttribute('data-file-id', file.id);
+
+                    if (file.id === NemodianApp.state.currentFileId) {
+                        item.classList.add('active');
+                    }
+
+                    fileList.appendChild(item);
+                    NemodianApp.fileManager.setupFileGestureHandlers(item, file.id);
+                });
+            },
+
+            /**
+             * Setup handlers for file items:
+             * 1. Click/Tap loads the file (primary action).
+             * 2. Long Press/Hold triggers the Delete modal (secondary action).
+             */
+            setupFileGestureHandlers: (element, fileId) => {
+                const state = NemodianApp.state;
+
+                const handleTouchStart = (e) => {
+                    if (e.touches.length > 1 || state.isStreaming) return; 
+
+                    // Start the long-press timer
+                    state.touchHoldTimer = setTimeout(() => {
+                        state.fileToDeleteId = fileId;
+                        document.getElementById('file-to-delete-name').textContent = element.textContent;
+                        document.getElementById('modal-overlay').style.display = 'flex';
+                        NemodianApp.utils.updateStatus(`[Langer Druck] Löschen von ${element.textContent} vorbereitet.`, 'warn');
+                        element.classList.add('holding-delete');
+                        
+                        // Prevent the click event from firing after hold
+                        element.isDeleting = true; 
+                    }, state.GESTURE_HOLD_TIME);
+                };
+
+                const handleTouchEnd = (e) => {
+                    clearTimeout(state.touchHoldTimer);
+                    element.classList.remove('holding-delete');
+
+                    // If a deletion was initiated, reset the flag after a brief moment
+                    if (element.isDeleting) {
+                        setTimeout(() => element.isDeleting = false, 50);
+                    }
+                };
+
+                // Touch Listeners
+                element.addEventListener('touchstart', handleTouchStart);
+                element.addEventListener('touchmove', () => clearTimeout(state.touchHoldTimer)); 
+                element.addEventListener('touchend', handleTouchEnd);
+                element.addEventListener('touchcancel', handleTouchEnd); 
+
+                // Primary Action: Load file on click/tap
+                element.addEventListener('click', (e) => {
+                    // Check the deletion flag to prevent loading immediately after a long press
+                    if (element.isDeleting || state.isStreaming) {
+                        e.preventDefault();
+                        return;
+                    }
+                    
+                    NemodianApp.fileManager.loadFile(fileId);
+                });
+            }
+        },
+
+        // --- Editor Core Module (History/Undo/Redo) ---
+        editorCore: {
+            createQuantumEditor: (textareaId) => {
+                const textarea = document.getElementById(textareaId);
+                let history = [textarea.value];
+                let historyIndex = 0;
+
+                const saveToHistory = (code) => {
+                    if (history[historyIndex] !== code) {
+                        history.splice(historyIndex + 1);
+                        history.push(code);
+                        historyIndex = history.length - 1;
+                    }
+                };
+
+                textarea.addEventListener('input', () => {
+                    saveToHistory(textarea.value);
+                    NemodianApp.fileManager.saveCurrentFile();
+                });
+
+                return {
+                    getCode: () => textarea.value,
+                    setCode: (code) => {
+                        textarea.value = code;
+                        textarea.scrollTop = 0; 
+                        saveToHistory(code);
+                    },
+                    appendCode: (chunk) => {
+                        textarea.value += chunk;
+                        textarea.scrollTop = textarea.scrollHeight;
+                        NemodianApp.fileManager.saveCurrentFile();
+                    },
+                    undo: () => {
+                        if (historyIndex > 0 && !NemodianApp.state.isStreaming) {
+                            historyIndex--;
+                            textarea.value = history[historyIndex];
+                            NemodianApp.fileManager.saveCurrentFile(); 
+                            NemodianApp.utils.updateStatus('Rückgängig gemacht.', 'info');
+                        } else if (!NemodianApp.state.isStreaming) {
+                            NemodianApp.utils.updateStatus('Keine weiteren Schritte zum Rückgängigmachen.', 'warn');
+                        } else {
+                            NemodianApp.utils.updateStatus('Stream aktiv. Aktion blockiert.', 'error');
+                        }
+                    },
+                    redo: () => {
+                        if (historyIndex < history.length - 1 && !NemodianApp.state.isStreaming) {
+                            historyIndex++;
+                            textarea.value = history[historyIndex];
+                            NemodianApp.fileManager.saveCurrentFile(); 
+                            NemodianApp.utils.updateStatus('Wiederhergestellt.', 'info');
+                        } else if (!NemodianApp.state.isStreaming) {
+                            NemodianApp.utils.updateStatus('Keine weiteren Schritte zum Wiederherstellen.', 'warn');
+                        } else {
+                            NemodianApp.utils.updateStatus('Stream aktiv. Aktion blockiert.', 'error');
+                        }
+                    },
+                    beautifyCode: () => {
+                        if (NemodianApp.state.isStreaming) {
+                            NemodianApp.utils.updateStatus('Stream aktiv. Aktion blockiert.', 'error');
+                            return;
+                        }
+                        const originalCode = textarea.value;
+                        // Basic, simple text-based "beautify" simulation
+                        const newCode = originalCode
+                            .split('\n')
+                            .map(line => line.trim())
+                            .filter(line => line.length > 0)
+                            .join('\n\n');
+                        NemodianApp.state.quantumEditor.setCode(newCode); 
+                        NemodianApp.fileManager.saveCurrentFile();
+                        NemodianApp.utils.updateStatus('Code-Struktur harmonisiert.', 'success');
+                    }
+                };
+            }
+        },
+
+        // --- Ollama Client Module (Simulated) ---
+        ollamaClient: {
+            simulatedResponse: NemodianApp.utils.demoHtmlContent,
+
+            ollamaGenerateStream: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('FEHLER: Ein Ollama-Stream ist bereits aktiv!', 'error');
+                    return;
+                }
+
+                NemodianApp.state.isStreaming = true;
+                NemodianApp.state.quantumEditor.setCode(''); 
+                
+                const responseChunks = NemodianApp.ollamaClient.simulatedResponse.split('\n');
+                let chunkIndex = 0;
+                const totalChunks = responseChunks.length;
+                const streamDelay = 50; 
+
+                NemodianApp.utils.updateStatus('Starte Ollama Build Stream (HTML Code)...', 'agent-nexus', 60000);
+
+                const appendNextChunk = () => {
+                    if (chunkIndex < totalChunks) {
+                        const chunk = responseChunks[chunkIndex] + '\n';
+                        NemodianApp.state.quantumEditor.appendCode(chunk);
+                        
+                        NemodianApp.utils.updateStatus(`STREAMING: CHUNK ${chunkIndex + 1}/${totalChunks} RECEIVED (Low-RAM Buffer)`, 'accent', 1000);
+
+                        chunkIndex++;
+                        setTimeout(appendNextChunk, streamDelay);
+                    } else {
+                        NemodianApp.state.isStreaming = false;
+                        NemodianApp.fileManager.saveCurrentFile(); 
+                        NemodianApp.utils.updateStatus(`Ollama Build Stream beendet. HTML-Code gespeichert. Klicken Sie auf "HTML View" zur Vorschau.`, 'success');
+                    }
+                };
+
+                appendNextChunk();
+            },
+
+            listCachedModels: () => {
+                NemodianApp.utils.updateStatus('Führe Ollama List (v12.x) aus...', 'info', 60000);
+                setTimeout(() => {
+                    const modelList = 
+`--- Local Ollama Cache Index ---
+MODEL: gemma2b:latest (80%) [Cached]
+MODEL: llama3:8b (95%) [Cached]
+MODEL: codellama:7b (100%) [Cached]
+MODEL: custom-fractal:v1 (30%) [Pull in progress]
+--------------------------------
+Optimize: Termux Caching OK.`;
+                    NemodianApp.state.quantumEditor.setCode(modelList);
+                    NemodianApp.fileManager.saveCurrentFile(); 
+                    NemodianApp.utils.updateStatus('Ollama List erfolgreich. Modell-Cache angezeigt.', 'success');
+                }, 1000);
+            },
+
+            pullNewModel: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('FEHLER: Ein Ollama-Stream ist bereits aktiv!', 'error');
+                    return;
+                }
+                
+                NemodianApp.state.isStreaming = true;
+                NemodianApp.state.quantumEditor.setCode(`Ollama v12.x > pull llama3:8b\n`);
+                let pullProgress = 0;
+                const pullInterval = setInterval(() => {
+                    pullProgress += 15;
+                    if (pullProgress <= 100) {
+                        const message = `PULLING llama3:8b: ${pullProgress}% | Chunk ${pullProgress/15} received. Low-RAM buffer utilization nominal.`;
+                        NemodianApp.state.quantumEditor.appendCode(`\n${message}`);
+                        NemodianApp.utils.updateStatus(message, 'agent-nexus', 2000);
+                    } else {
+                        clearInterval(pullInterval);
+                        NemodianApp.state.isStreaming = false;
+                        NemodianApp.state.quantumEditor.appendCode(`\n\nPull completed. New model cached and ready.`);
+                        NemodianApp.fileManager.saveCurrentFile();
+                        NemodianApp.utils.updateStatus('Ollama: llama3:8b erfolgreich im Termux-Cache installiert.', 'success');
+                    }
+                }, 1000);
+            },
+
+            calculateGenesisHash: async () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Stream aktiv. Hash-Berechnung blockiert.', 'error');
+                    return;
+                }
+                const inputCode = NemodianApp.state.quantumEditor.getCode();
+                
+                if (!inputCode || inputCode.trim() === '') {
+                    NemodianApp.utils.updateStatus('Warnung: Der Editor ist leer. Bitte geben Sie den Code-Assembler-Output ein.', 'warn');
+                    return;
+                }
+
+                try {
+                    NemodianApp.utils.updateStatus('Berechne konsolidierten Genesis-Hash (SHA-256)...', 'info');
+                    
+                    const hashResult = await NemodianApp.utils.calculateConsensusHash(inputCode);
+                    
+                    const safeInputSnippet = inputCode.substring(0, 80).replace(/\n/g, ' \\n ').replace(/\r/g, '');
+
+                    const outputText = `//--- Konsolidierter Genesis Hash (SHA-256) ---\n`
+                                     + `// Input Hash-Basis (Start-Snippet):\n// ${safeInputSnippet}...\n`
+                                     + `// Finaler Konsens-Hash:\n${hashResult}\n`
+                                     + `//----------------------------------------\n\n`;
+
+                    NemodianApp.state.quantumEditor.setCode(outputText + inputCode); 
+                    NemodianApp.fileManager.saveCurrentFile(); 
+                    NemodianApp.utils.updateStatus('Erfolg: Genesis Hash berechnet und in den Editor eingefügt.', 'success');
+
+                } catch (error) {
+                    console.error("Hashing error:", error);
+                    NemodianApp.utils.updateStatus('Fehler beim Berechnen des Hashs: ' + error.message, 'error');
+                }
+            },
+
+            processPrompt: (promptText) => {
+                if (NemodianApp.state.isStreaming) {
+                     NemodianApp.utils.updateStatus('FEHLER: Ein Ollama-Stream ist bereits aktiv!', 'error');
+                     return;
+                }
+                if (!promptText) {
+                    NemodianApp.utils.updateStatus('Bitte geben Sie einen Ollama-Befehl ein.', 'warn');
+                    return;
+                }
+
+                NemodianApp.utils.updateStatus(`Verarbeite Ollama-Befehl: "${promptText.substring(0, 50)}..."`, 'agent-nexus', 6000);
+
+                const lowerPrompt = promptText.toLowerCase();
+
+                // Simuliert eine Intent-Erkennung für Ollama-Befehle
+                if (lowerPrompt.includes('generate') || lowerPrompt.includes('schreibe') || lowerPrompt.includes('erstelle') || lowerPrompt.includes('html')) {
+                    setTimeout(() => {
+                        NemodianApp.ollamaClient.ollamaGenerateStream();
+                    }, 1000);
+                } else if (lowerPrompt.includes('list') || lowerPrompt.includes('modelle')) {
+                    setTimeout(() => {
+                        NemodianApp.ollamaClient.listCachedModels();
+                    }, 1000);
+                } else if (lowerPrompt.includes('pull') || lowerPrompt.includes('ziehe')) {
+                    setTimeout(() => {
+                        NemodianApp.ollamaClient.pullNewModel();
+                    }, 1000);
+                } else if (lowerPrompt.includes('hash')) {
+                     setTimeout(async () => {
+                        await NemodianApp.ollamaClient.calculateGenesisHash();
+                    }, 1000);
+                } else {
+                    setTimeout(() => {
+                        NemodianApp.utils.updateStatus(`Unbekannter Ollama-Befehl. Stream-Generierung gestartet: ${promptText.substring(0, 20)}...`, 'error', 5000);
+                        NemodianApp.ollamaClient.ollamaGenerateStream(); // Default: Starte Stream
+                    }, 2000);
+                }
+            }
+        },
+        
+        // --- Enhanced Orchestrator Module (AI Actions) ---
+        enhancedOrchestrator: {
+            quantumOptimize: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Stream aktiv. Optimierung blockiert.', 'error');
+                    return;
+                }
+                NemodianApp.fileManager.saveCurrentFile();
+                const originalCode = NemodianApp.state.quantumEditor.getCode();
+                if (!originalCode.trim()) {
+                    NemodianApp.utils.updateStatus('Editor ist leer. Nichts zu optimieren.', 'warn');
+                    return;
+                }
+
+                NemodianApp.utils.updateStatus('Starte QUANTUM OPTIMIZATION (RAM/CPU)...', 'agent-nexus', 3000);
+
+                setTimeout(() => {
+                    const optimizedCode = originalCode.replace(/\s{2,}/g, ' ') 
+                                                      .replace(/(\n\s*){3,}/g, '\n\n') 
+                                                      .replace(/;(?=\n)/g, ''); 
+
+                    NemodianApp.state.quantumEditor.setCode(`// --- KI OPTIMIERT (Effizienz +1.2%) ---\n${optimizedCode}\n// --- Ende der Optimierung ---`);
+                    NemodianApp.fileManager.saveCurrentFile();
+                    NemodianApp.utils.updateStatus('Optimierung abgeschlossen: Code-Effizienz +1.2% (Simuliert).', 'success');
+                }, 1500);
+            },
+
+            quantumDocument: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Stream aktiv. Dokumentation blockiert.', 'error');
+                    return;
+                }
+                NemodianApp.fileManager.saveCurrentFile();
+                const originalCode = NemodianApp.state.quantumEditor.getCode();
+                if (!originalCode.trim()) {
+                    NemodianApp.utils.updateStatus('Editor ist leer. Nichts zu dokumentieren.', 'warn');
+                    return;
+                }
+
+                NemodianApp.utils.updateStatus('Starte FRAKTAL DOCUMENTATION (Kommentar-Overlay)...', 'agent-nexus', 3000);
+
+                setTimeout(() => {
+                    const lines = originalCode.split('\n');
+                    const documentedLines = lines.map(line => {
+                        if (line.trim().startsWith('function') || line.trim().startsWith('const') || line.trim().startsWith('let') || line.trim().startsWith('var')) {
+                            return `// [AUTO-DOC]: Definiert eine Schlüsselvariable/Funktion für [Zweck]\n${line}`;
+                        }
+                        return line;
+                    }).join('\n');
+
+                    NemodianApp.state.quantumEditor.setCode(documentedLines);
+                    NemodianApp.fileManager.saveCurrentFile();
+                    NemodianApp.utils.updateStatus('Dokumentation abgeschlossen: Wichtige Funktionen kommentiert.', 'success');
+                }, 2000);
+            },
+
+            quantumRefactor: () => {
+                if (NemodianApp.state.isStreaming) {
+                    NemodianApp.utils.updateStatus('Stream aktiv. Refaktorierung blockiert.', 'error');
+                    return;
+                }
+                NemodianApp.fileManager.saveCurrentFile();
+                const originalCode = NemodianApp.state.quantumEditor.getCode();
+                if (!originalCode.trim()) {
+                    NemodianApp.utils.updateStatus('Editor ist leer. Nichts zu refaktorieren.', 'warn');
+                    return;
+                }
+
+                NemodianApp.utils.updateStatus('Starte RELAIS REFACTORING (Modulare Zerlegung)...', 'agent-nexus', 3000);
+
+                setTimeout(() => {
+                    const refactoredCode = `// --- RELAIS REFACTORING RESULT (Modular v2.1) ---\n` +
+                                           `// Code wurde in ein simuliertes Modul zerlegt (nur Header):\n\n` +
+                                           `import { CoreLogic } from './core/logic.js';\n` +
+                                           `import { UI_Handler } from './ui/handler.js';\n\n` +
+                                           `function runRefactoredApp() {\n` +
+                                           `  CoreLogic.init();\n` +
+                                           `  UI_Handler.attachEvents();\n` +
+                                           `}\n\n` +
+                                           originalCode;
+
+                    NemodianApp.state.quantumEditor.setCode(refactoredCode);
+                    NemodianApp.fileManager.saveCurrentFile();
+                    NemodianApp.utils.updateStatus('Refaktorierung abgeschlossen: Code in modulare Struktur überführt (Simuliert).', 'success');
+                }, 2500);
+            }
+        },
+
+        // --- UI Module (DOM Interaction and Listeners) ---
+        ui: {
+            openHtmlPreview: () => {
+                NemodianApp.fileManager.saveCurrentFile();
+                const htmlCode = NemodianApp.state.quantumEditor.getCode();
+                const previewModal = document.getElementById('html-preview-modal');
+                const previewIframe = document.getElementById('preview-iframe');
+
+                if (!htmlCode.includes('<html')) {
+                    NemodianApp.utils.updateStatus('Fehler: Aktueller Inhalt ist kein vollständiger HTML-Code (Fehlender <html> Tag).', 'error');
+                    return;
+                }
+
+                const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(htmlCode);
+                previewIframe.src = dataUrl;
+                
+                previewModal.style.display = 'flex';
+                NemodianApp.utils.updateStatus('HTML-Build-Preview geladen.', 'success');
+            },
+
+            closeHtmlPreview: () => {
+                document.getElementById('html-preview-modal').style.display = 'none';
+                document.getElementById('preview-iframe').src = 'about:blank';
+                NemodianApp.utils.updateStatus('HTML-Preview geschlossen.', 'info');
+            },
+            
+            setupListeners: () => {
+                // Left Panel Toggle (Mobile Only)
+                const leftToggle = document.getElementById('left-toggle');
+                const editorStage = document.getElementById('editor-stage');
+                const editorContainer = document.getElementById('editor-container');
+                
+                const closeSidebar = () => {
+                    editorStage.classList.remove('left-panel-open');
+                    leftToggle.textContent = '☰';
+                };
+                
+                const openSidebar = () => {
+                    editorStage.classList.add('left-panel-open');
+                    leftToggle.textContent = '✕';
+                };
+
+                leftToggle.addEventListener('click', () => {
+                    const isOpen = editorStage.classList.contains('left-panel-open');
+                    isOpen ? closeSidebar() : openSidebar();
+                });
+                
+                // Close sidebar when clicking on the editor area overlay on mobile
+                editorContainer.addEventListener('click', (e) => {
+                    if (window.innerWidth <= 768 && editorStage.classList.contains('left-panel-open')) {
+                        // Check if the click occurred on the simulated overlay (editor container itself)
+                        if (e.target === editorContainer || e.target === document.getElementById('editor')) {
+                           closeSidebar();
+                        }
+                    }
+                });
+
+
+                // File Management Actions
+                document.getElementById('btn-new-file').addEventListener('click', NemodianApp.fileManager.newFile);
+
+                // Editor Quick Actions
+                document.getElementById('btn-undo').addEventListener('click', () => NemodianApp.state.quantumEditor.undo());
+                document.getElementById('btn-redo').addEventListener('click', () => NemodianApp.state.quantumEditor.redo());
+                document.getElementById('btn-beautify').addEventListener('click', () => NemodianApp.state.quantumEditor.beautifyCode());
+                
+                // Ollama Client Actions
+                document.getElementById('btn-generate').addEventListener('click', NemodianApp.ollamaClient.ollamaGenerateStream);
+                document.getElementById('btn-list-models').addEventListener('click', NemodianApp.ollamaClient.listCachedModels);
+                document.getElementById('btn-pull-model').addEventListener('click', NemodianApp.ollamaClient.pullNewModel);
+                document.getElementById('btn-genesis-hash').addEventListener('click', NemodianApp.ollamaClient.calculateGenesisHash);
+
+                // Enhanced Orchestrator Actions (AI)
+                document.getElementById('btn-optimize').addEventListener('click', NemodianApp.enhancedOrchestrator.quantumOptimize);
+                document.getElementById('btn-document').addEventListener('click', NemodianApp.enhancedOrchestrator.quantumDocument);
+                document.getElementById('btn-refactor').addEventListener('click', NemodianApp.enhancedOrchestrator.quantumRefactor);
+
+                // HTML Preview Handlers
+                document.getElementById('btn-html-view').addEventListener('click', NemodianApp.ui.openHtmlPreview);
+                document.getElementById('btn-close-preview').addEventListener('click', NemodianApp.ui.closeHtmlPreview);
+
+                // Prompt Input / Submit
+                const promptInput = document.getElementById('prompt-input');
+                const promptSubmit = document.getElementById('prompt-submit');
+
+                const handleSubmit = () => {
+                    const promptText = promptInput.value.trim();
+                    NemodianApp.ollamaClient.processPrompt(promptText);
+                    promptInput.value = ''; 
+                    promptInput.blur(); 
+                };
+
+                promptSubmit.addEventListener('click', handleSubmit);
+                promptInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleSubmit();
+                    }
+                });
+                
+                // Modal Handlers
+                const overlay = document.getElementById('modal-overlay');
+                const btnCancel = document.getElementById('btn-cancel-delete');
+                const btnConfirm = document.getElementById('btn-confirm-delete');
+
+                const closeModal = () => {
+                    overlay.style.display = 'none';
+                    NemodianApp.state.fileToDeleteId = null;
+                };
+
+                btnCancel.addEventListener('click', closeModal);
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        closeModal();
+                    }
+                });
+
+                btnConfirm.addEventListener('click', () => {
+                    if (NemodianApp.state.fileToDeleteId) {
+                        NemodianApp.fileManager.deleteFile(NemodianApp.state.fileToDeleteId);
+                    }
+                    closeModal();
+                });
+            }
+        },
+
+        // --- Main Initialization Function ---
+        init: () => {
+            try {
+                // Initialize Editor
+                NemodianApp.state.quantumEditor = NemodianApp.editorCore.createQuantumEditor('editor');
+                
+                // Initialize File Manager (loads initial files)
+                NemodianApp.fileManager.init(); 
+                NemodianApp.fileManager.renderFileList();
+
+                // Setup all event listeners
+                NemodianApp.ui.setupListeners(); 
+                
+                // Set default desktop view: open sidebar if screen is large
+                if (window.innerWidth > 768) {
+                    document.getElementById('editor-stage').classList.add('left-panel-open');
+                }
+
+                NemodianApp.utils.updateStatus('Ollama Routinen v12.x erfolgreich initialisiert. Design: Deep Cyber Violet.', 'success');
+
+            } catch (e) {
+                NemodianApp.utils.updateStatus('Kritischer Fehler bei der Editor-Initialisierung: ' + e.message, 'error');
+            }
+        }
+    };
+    
+    // --- Application Start ---
+    window.onload = NemodianApp.init;
+
+</script>
+</body>
+</html>
