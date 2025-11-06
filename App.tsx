@@ -651,6 +651,20 @@ const App: React.FC = () => {
         }
     };
 
+    const showHtmlSingleFile = useCallback(() => {
+        const htmlNode = get(fileSystem, '/index.html');
+        if (htmlNode && htmlNode.type === 'file') {
+            setActiveFilePath('/index.html');
+            setEditorContent(htmlNode.content);
+            setFileName('index.html');
+            setFileType('html');
+            setHistory([htmlNode.content]);
+            setHistoryIndex(0);
+        } else {
+            alert('index.html not found or is not a file in the current file system!');
+        }
+    }, [fileSystem]);
+
     return (
         <div
             className="h-screen w-screen grid grid-rows-[max-content_max-content_1fr_max-content] grid-cols-1 relative overflow-hidden"
@@ -662,6 +676,7 @@ const App: React.FC = () => {
                 isPreviewing={isPreviewOpen}
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
+                onShowHtmlSingleFile={showHtmlSingleFile}
             />
             <StatusBar fileName={fileName} stats={stats} />
             <main className="grid-in-main flex overflow-hidden">

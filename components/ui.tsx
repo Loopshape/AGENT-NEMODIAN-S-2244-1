@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode } from '../types';
@@ -8,6 +9,7 @@ interface HeaderProps {
     isPreviewing: boolean;
     onRunAI: () => void;
     onRunOrchestrator: () => void;
+    onShowHtmlSingleFile: () => void;
 }
 
 /**
@@ -19,6 +21,7 @@ interface HeaderProps {
  * @param {boolean} props.isPreviewing - Indicates if the live preview is active.
  * @param {() => void} props.onRunAI - Opens the prompt modal for a single Quantum AI run.
  * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
+ * @param {() => void} props.onShowHtmlSingleFile - Opens the index.html file in the editor.
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
@@ -43,6 +46,12 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 }`}
             >
                 {props.isPreviewing ? 'Close Preview' : 'Live Preview'}
+            </button>
+            <button
+                onClick={props.onShowHtmlSingleFile}
+                className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
+            >
+                Open index.html
             </button>
             <button
                 onClick={props.onRunAI}
@@ -583,6 +592,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
                 });
             };
 
+            // FIX: Define handleResizeEnd locally to correctly manage resize events.
             const handleResizeEnd = () => {
                 window.removeEventListener('mousemove', handleResizeMove);
                 window.removeEventListener('mouseup', handleResizeEnd);
