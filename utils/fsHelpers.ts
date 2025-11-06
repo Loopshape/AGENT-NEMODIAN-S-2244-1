@@ -1,4 +1,5 @@
 
+
 import type { FolderNode, FileSystemNode } from '../types';
 
 /**
@@ -29,22 +30,36 @@ export const get = (root: FolderNode, path: string): FileSystemNode | undefined 
  * @returns {FolderNode} The new, updated file system root.
  */
 export const set = (root: FolderNode, path: string, value: FileSystemNode): FolderNode => {
-    const newRoot = JSON.parse(JSON.stringify(root)); // Deep clone for immutability
     const parts = path.split('/').filter(p => p);
-    const fileName = parts.pop();
-
-    if (!fileName) return newRoot; // Cannot set the root itself
-
-    let currentNode = newRoot;
-    for (const part of parts) {
-        if (!currentNode.children[part] || currentNode.children[part].type !== 'folder') {
-            currentNode.children[part] = { type: 'folder', children: {} };
-        }
-        currentNode = currentNode.children[part] as FolderNode;
-    }
     
-    currentNode.children[fileName] = value;
-    return newRoot;
+    // Recursive helper to rebuild the path immutably
+    const setNodeRecursive = (currentFolder: FolderNode, currentParts: string[], newValue: FileSystemNode): FolderNode => {
+        if (currentParts.length === 0) {
+            // This should not happen if path is valid and has a fileName
+            return { ...currentFolder }; 
+        }
+
+        const [part, ...remainingParts] = currentParts;
+        const newChildren = { ...currentFolder.children };
+
+        if (remainingParts.length === 0) {
+            // We're at the final part (the file/folder to be set)
+            newChildren[part] = newValue;
+        } else {
+            // We need to go deeper into a subfolder
+            const nextNode = currentFolder.children[part] || { type: 'folder', children: {} };
+            if (nextNode.type === 'folder') {
+                newChildren[part] = setNodeRecursive(nextNode, remainingParts, newValue);
+            } else {
+                // Cannot set a child inside a file node, error or overwrite with folder
+                console.warn(`Attempted to set a child inside a file at path segment: ${part}. Overwriting with new folder.`);
+                newChildren[part] = setNodeRecursive({ type: 'folder', children: {} }, remainingParts, newValue);
+            }
+        }
+        return { ...currentFolder, children: newChildren };
+    };
+
+    return setNodeRecursive(root, parts, value);
 };
 
 /**
@@ -54,21 +69,48 @@ export const set = (root: FolderNode, path: string, value: FileSystemNode): Fold
  * @returns {FolderNode} The new, updated file system root.
  */
 export const unset = (root: FolderNode, path: string): FolderNode => {
-    const newRoot = JSON.parse(JSON.stringify(root)); // Deep clone for immutability
     const parts = path.split('/').filter(p => p);
-    const fileName = parts.pop();
-
-    if (!fileName) return newRoot; // Cannot unset the root itself
-
-    let currentNode = newRoot;
-    for (const part of parts) {
-        if (currentNode.children[part] && currentNode.children[part].type === 'folder') {
-            currentNode = currentNode.children[part] as FolderNode;
-        } else {
-            return newRoot; // Parent path doesn't exist, so nothing to delete
+    
+    // Recursive helper to rebuild the path immutably for deletion
+    const unsetNodeRecursive = (currentFolder: FolderNode, currentParts: string[]): FolderNode | undefined => {
+        if (currentParts.length === 0) {
+            // This means we tried to delete the root or an invalid path
+            return currentFolder;
         }
-    }
 
-    delete currentNode.children[fileName];
-    return newRoot;
+        const [part, ...remainingParts] = currentParts;
+        const newChildren = { ...currentFolder.children };
+
+        if (remainingParts.length === 0) {
+            // We're at the final part (the file/folder to be deleted)
+            if (!(part in newChildren)) {
+                // Item not found, return current folder without changes
+                return currentFolder;
+            }
+            delete newChildren[part];
+            return { ...currentFolder, children: newChildren };
+        } else {
+            // We need to go deeper into a subfolder
+            const nextNode = currentFolder.children[part];
+            if (nextNode && nextNode.type === 'folder') {
+                const updatedChild = unsetNodeRecursive(nextNode, remainingParts);
+                if (updatedChild === nextNode) {
+                    // No change in child, so no change in currentFolder
+                    return currentFolder;
+                }
+                if (updatedChild) {
+                    newChildren[part] = updatedChild;
+                } else {
+                    delete newChildren[part]; // Child folder became empty or was fully deleted
+                }
+                return { ...currentFolder, children: newChildren };
+            } else {
+                // Parent path doesn't exist or is a file, nothing to delete further down this path
+                return currentFolder;
+            }
+        }
+    };
+
+    const newRoot = unsetNodeRecursive(root, parts);
+    return newRoot || root; // Return the new root, or original if nothing changed/deleted root
 };

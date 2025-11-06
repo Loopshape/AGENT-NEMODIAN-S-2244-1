@@ -162,6 +162,11 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => (
                             >
                                 {chunk.web.title || chunk.web.uri}
                             </a>
+                            {chunk.web.snippet && ( // Display snippet if available
+                                <p className="text-slate-500 mt-0.5 ml-4 text-[0.65rem] line-clamp-2">
+                                    {chunk.web.snippet}
+                                </p>
+                            )}
                         </li>
                     )
             )}
@@ -408,7 +413,8 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
         if (!chunk.web) return false;
         return (
             (chunk.web.title || '').toLowerCase().includes(lowerCaseQuery) ||
-            chunk.web.uri.toLowerCase().includes(lowerCaseQuery)
+            chunk.web.uri.toLowerCase().includes(lowerCaseQuery) ||
+            (chunk.web.snippet || '').toLowerCase().includes(lowerCaseQuery) // Include snippet in search
         );
     });
 
