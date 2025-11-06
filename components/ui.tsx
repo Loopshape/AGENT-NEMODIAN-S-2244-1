@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode } from '../types';
@@ -10,6 +9,7 @@ interface HeaderProps {
     onRunAI: () => void;
     onRunOrchestrator: () => void;
     onShowHtmlSingleFile: () => void;
+    onFixCode: () => void; // New prop for AI Fix Code
 }
 
 /**
@@ -22,6 +22,7 @@ interface HeaderProps {
  * @param {() => void} props.onRunAI - Opens the prompt modal for a single Quantum AI run.
  * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
  * @param {() => void} props.onShowHtmlSingleFile - Opens the index.html file in the editor.
+ * @param {() => void} props.onFixCode - Initiates an AI-driven quick code fix.
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
@@ -52,6 +53,12 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
             >
                 Open index.html
+            </button>
+            <button
+                onClick={props.onFixCode}
+                className="bg-[#673AB7] hover:bg-[#855CCB] text-xs px-2 py-1.5 rounded transition-colors"
+            >
+                AI Fix Code
             </button>
             <button
                 onClick={props.onRunAI}
@@ -293,6 +300,7 @@ interface LeftPanelProps extends FileExplorerProps {
     onSaveDraft: () => void;
     onLoadDraft: () => void;
     onCodeReview: () => void;
+    onFixCode: () => void; // New prop for AI Fix Code
 }
 
 /**
@@ -318,6 +326,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
         onSaveDraft,
         onLoadDraft,
         onCodeReview,
+        onFixCode, // Destructure new prop
         fileSystem,
         activePath,
         onOpenFile,
@@ -354,8 +363,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                         REDO
                     </button>
                     <button
+                        onClick={onFixCode} // New button for AI Fix Code
+                        className="bg-[#673AB7] hover:bg-[#855CCB] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                    >
+                        AI Fix Code
+                    </button>
+                    <button
                         onClick={() => onQuickAction('optimize')}
-                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Quantum Optimize
                     </button>

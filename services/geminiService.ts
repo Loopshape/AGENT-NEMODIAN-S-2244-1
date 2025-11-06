@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Candidate, Persona, CodeReviewFinding, GroundingChunk } from '../types';
 
@@ -300,4 +299,30 @@ Return your findings as a JSON object that adheres to the provided schema.
         console.error('Failed to parse code review response:', e);
         throw new Error('Could not parse AI code review response.');
     }
+};
+
+/**
+ * Performs a quick AI-driven fix on a given code content.
+ * This uses a faster model for general bug fixes, syntax corrections, and minor improvements.
+ * @param {string} codeContent - The code to be fixed.
+ * @returns {Promise<string>} A promise that resolves to the fixed code string.
+ */
+export const quickFixCode = async (codeContent: string): Promise<string> => {
+    const prompt = `You are an expert software engineer whose sole task is to review and fix code for common issues such as syntax errors, logical bugs, and style inconsistencies. Your response must ONLY contain the corrected, complete, and production-ready code block. Do not include any explanations, markdown formatting, or other text outside of the code. Just the code.
+
+Code to fix:
+\`\`\`
+${codeContent}
+\`\`\`
+`;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash', // Using a faster model for quick fixes
+        contents: prompt,
+    });
+
+    // The guideline states: "Produce only the final, complete, and production-ready code block as your response.
+    // Do not include any explanations, markdown formatting, or other text outside of the code."
+    // So, response.text should already be the code.
+    return response.text.trim();
 };

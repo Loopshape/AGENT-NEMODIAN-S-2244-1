@@ -19,7 +19,7 @@ import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './
 import { Editor } from './components/Editor';
 import { AiResponsePanel } from './components/AiPanels';
 import { PromptModal } from './components/PromptModal';
-import { generateWithThinkingStream, runMultiAgentConsensus, personas, runCodeReview } from './services/geminiService';
+import { generateWithThinkingStream, runMultiAgentConsensus, personas, runCodeReview, quickFixCode } from './services/geminiService';
 import { get, set, unset } from './utils/fsHelpers';
 
 const INITIAL_FILES: FolderNode = {
@@ -558,6 +558,43 @@ const App: React.FC = () => {
         }
     };
 
+    const handleFixCode = async () => {
+        if (aiState.isLoading || !activeFilePath) return;
+
+        setOriginalCodeForDiff(editorContent);
+        setIsAiPanelOpen(true);
+        setAiState({
+            agents: initialAgentState,
+            isLoading: true,
+            consensus: null,
+            generatedCode: null,
+            groundingChunks: null,
+            codeReviewFindings: null,
+        });
+
+        try {
+            updateAgent('nexus', { status: 'working', content: 'Initiating quantum code fix...' });
+            await new Promise((r) => setTimeout(r, 400));
+            updateAgent('cognito', { status: 'working', content: 'Analyzing code for issues...' });
+            await new Promise((r) => setTimeout(r, 400));
+
+            const fixedCode = await quickFixCode(editorContent);
+
+            updateAgent('cognito', { status: 'done', content: 'Code analysis complete.' });
+            updateAgent('echo', { status: 'working', content: 'Applying quantum fix...' });
+            await new Promise((r) => setTimeout(r, 400));
+
+            setAiState((prev) => ({ ...prev, generatedCode: fixedCode }));
+            updateAgent('echo', { status: 'done', content: 'Quantum Code Fix Applied.' });
+        } catch (error) {
+            console.error('AI Fix Code Error:', error);
+            updateAgent('echo', { status: 'error', content: `Fix Code Error: ${(error as Error).message}` });
+        } finally {
+            setAiState((prev) => ({ ...prev, isLoading: false }));
+        }
+    };
+
+
     const handleAnalyzeSelection = () => {
         const selection = window.getSelection()?.toString() || '';
         if (selection) {
@@ -677,6 +714,7 @@ const App: React.FC = () => {
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
                 onShowHtmlSingleFile={showHtmlSingleFile}
+                onFixCode={handleFixCode} // Pass new handler to Header
             />
             <StatusBar fileName={fileName} stats={stats} />
             <main className="grid-in-main flex overflow-hidden">
@@ -697,6 +735,7 @@ const App: React.FC = () => {
                     onSaveDraft={handleSaveDraft}
                     onLoadDraft={handleLoadDraft}
                     onCodeReview={handleCodeReview}
+                    onFixCode={handleFixCode} // Pass new handler to LeftPanel
                     fileSystem={fileSystem}
                     activePath={activeFilePath}
                     onOpenFile={handleOpenFile}
