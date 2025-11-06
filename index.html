@@ -1,89 +1,755 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nemodian 2244-1 :: Quantum Fractal AI Editor</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nemodian 2244-1 :: AI Studio Rebuild (Code Generation)</title>
     <style>
+        /* ----- AI Studio / Colab Inspired CSS Reset & Base ----- */
+        :root {
+            --baseline: 1.5rem;
+            --gutter: 1rem;
+            --header-h: 3rem;
+            --footer-h: 3.5rem; 
+
+            /* AI Studio Color Palette */
+            --ui-primary: #1a73e8;
+            --ui-secondary: #4ac94a;
+            --ui-bg-light: #f8f9fa;
+            --ui-bg-white: #ffffff;
+            --ui-text-dark: #202124;
+            --ui-text-muted: #5f6368;
+            --ui-border: #dadce0;
+
+            /* Cell and Editor Colors */
+            --cell-bg: var(--ui-bg-white);
+            --cell-border-focus: var(--ui-primary);
+            --editor-accent: var(--ui-primary);
+            --editor-gutter: #e6e6e6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
         body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--ui-bg-light);
+            color: var(--ui-text-dark);
+            min-height: 100vh;
+            display: grid;
+            grid-template-rows: var(--header-h) 1fr var(--footer-h);
+            grid-template-columns: 1fr;
+            overflow: hidden;
+        }
+
+        header {
+            grid-row: 1;
+            background: var(--ui-bg-white);
+            border-bottom: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 var(--gutter);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            z-index: 50;
+        }
+
+        .header-title {
+            font-weight: 500;
+            color: var(--ui-text-dark);
+            font-size: 1.1rem;
+        }
+
+        #editor-stage {
+            grid-row: 2;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            overflow: hidden;
+        }
+
+        #left-panel {
+            grid-column: 1;
+            background: var(--ui-bg-white);
+            border-right: 1px solid var(--ui-border);
+            padding: var(--gutter);
+            overflow-y: auto;
+        }
+
+        .panel-section-title {
+            font-weight: 500;
+            margin-top: var(--gutter);
+            margin-bottom: 0.5rem;
+            border-bottom: 1px solid var(--ui-border);
+            padding-bottom: 0.25rem;
+        }
+
+        #notebook-container {
+            grid-column: 2;
+            background: var(--ui-bg-light);
+            padding: var(--gutter) calc(var(--gutter) * 2);
+            overflow-y: auto;
+        }
+
+        #code-cell {
+            background: var(--cell-bg);
+            border: 1px solid var(--ui-border);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(60, 64, 67, 0.1);
+            margin-bottom: var(--gutter);
+            position: relative;
+            padding-top: 5px;
+        }
+
+        #editor-outer {
+            position: relative;
+            max-height: 400px; 
+            overflow: hidden;
+            min-height: 250px;
+        }
+        
+        #line-gutter, .highlighting, #editor {
             font-family: 'Fira Code', monospace;
-        }
-        @keyframes quantumScan {
-            0% { left: -100%; }
-            100% { left: 100%; }
-        }
-        @keyframes quantumPulse {
-            0% { opacity: 0.7; transform: scale(1); }
-            100% { opacity: 1; transform: scale(1.05); }
-        }
-        @keyframes threadFlow {
-            0% { top: -100%; }
-            100% { top: 100%; }
-        }
-        @keyframes quantumSpin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        @keyframes quantumPulseDot {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.3); opacity: 0.7; }
-        }
-        @keyframes fractalPulse {
-            0% { transform: scale(1); opacity: 0.3; }
-            100% { transform: scale(1.5); opacity: 0.8; }
-        }
-        @keyframes agentPulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.01); }
-        }
-        @keyframes titlePulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-        @keyframes agentIdle {
-            0%, 100% { opacity: 0.8; }
-            50% { opacity: 1; }
-        }
-        @keyframes agentError {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
-            20%, 40%, 60%, 80% { transform: translateX(2px); }
-        }
-        .quantum-scan::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
+            font-size: 0.875rem;
+            line-height: var(--baseline);
+            padding: var(--gutter);
+            padding-top: var(--gutter);
+            padding-bottom: var(--gutter);
+            width: 100%; 
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(187, 134, 252, 0.6), transparent);
-            animation: quantumScan 3s infinite linear;
         }
-        .quantum-pulse { animation: quantumPulse 2s infinite alternate; }
-        .quantum-thread { animation: threadFlow 2s infinite linear; }
-        .quantum-spinner::before { animation: quantumSpin 1s linear infinite; }
-        .quantum-spinner::after { animation: quantumSpin 0.5s linear infinite; }
-        .quantum-dot::before { animation: quantumPulseDot 2s infinite; }
-        .fractal-node { animation: fractalPulse 1.5s infinite alternate; }
+
+        #line-gutter {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4rem;
+            background: var(--editor-gutter);
+            color: var(--ui-text-muted);
+            text-align: right;
+            user-select: none;
+            z-index: 10;
+            border-right: 1px solid var(--ui-border);
+            border-radius: 8px 0 0 8px;
+            overflow-y: hidden; 
+            padding-right: 0.5rem;
+            box-sizing: content-box; 
+        }
+
+        .highlighting {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            pointer-events: none;
+            overflow: hidden; 
+            z-index: 5;
+            padding-left: calc(4rem + 1rem); 
+        }
+
+        .highlighting pre {
+            margin: 0;
+            white-space: pre;
+        }
+
+        #editor {
+            position: absolute;
+            left: 0; 
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background: transparent;
+            color: transparent;
+            caret-color: var(--editor-accent);
+            border: 0;
+            outline: 0;
+            resize: none;
+            white-space: pre;
+            word-break: normal;
+            z-index: 20;
+            tab-size: 4;
+            overflow: auto; 
+            padding-left: calc(4rem + 1rem); 
+        }
+
+        #ai-output-block {
+            background: var(--ui-bg-light);
+            border: 1px solid var(--ui-border);
+            border-radius: 4px;
+            padding: var(--gutter);
+            margin-top: calc(var(--gutter) / 2);
+            font-size: 0.875rem;
+            line-height: 1.4;
+            color: var(--ui-text-dark);
+            min-height: 50px;
+            display: none;
+            overflow-x: auto;
+        }
+        
+        .verbose-log {
+            background: #202124; 
+            color: #ccc; 
+            padding: 10px;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            margin-top: 1rem;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #5f6368;
+        }
+
+        footer {
+            grid-row: 3;
+            background: var(--ui-bg-white);
+            border-top: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            padding: 0 var(--gutter);
+            gap: var(--gutter);
+            z-index: 50;
+        }
+
+        button.primary {
+            background: var(--ui-primary);
+            border-color: var(--ui-primary);
+            color: white;
+        }
+
+        button.run {
+            background: var(--ui-secondary);
+            border-color: var(--ui-secondary);
+            color: var(--ui-text-dark);
+            font-weight: bold;
+        }
+
+        .status-dot.connected {
+            background: var(--ui-secondary);
+        }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
-  }
-}
-</script>
 </head>
-<body class="bg-[#3a3c31] text-[#f0f0e0] overflow-hidden">
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+<body>
+    <header>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <button id="left-toggle" class="small" style="font-size: 1.2rem; min-width: 32px; padding: 4px;">☰</button>
+            <div class="header-title">AI Studio Notebook :: Nemodian 2244-1</div>
+        </div>
+        <div class="header-right">
+            <button id="run-quantum-ai" class="run">▶ Run</button>
+            <button id="show-dashboard" class="primary">Agents</button>
+            <button id="save-file" class="small">Save</button>
+        </div>
+    </header>
+
+    <div id="editor-stage">
+        <aside id="left-panel">
+            <div class="panel-section-title">Model Configuration</div>
+            <div class="config-item">Model: **gemini-2.5-pro**</div>
+            <div class="config-item">Temperature: 0.7</div>
+            <div class="config-item">Max Tokens: 8192</div>
+
+            <div class="panel-section-title">Nemodian Tools</div>
+            <button id="btn-undo" class="small">Undo / Redo History</button>
+            <button id="btn-beautify" class="small">Beautify Code</button>
+            <button id="render-html" class="small">HTML Preview</button>
+
+            <div class="panel-section-title">Agent Status</div>
+            <div class="config-item" style="display: flex; align-items: center;">
+                <span class="status-dot connected" id="ai-dot-indicator"></span>
+                <span id="ai-indicator">Quantum AI: Ready</span>
+            </div>
+        </aside>
+
+        <div id="notebook-container">
+            <div id="code-cell">
+                <div class="cell-indicator">In [1]</div>
+                <div id="editor-outer">
+                    <div id="line-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10</div>
+                    <div class="highlighting">
+                        <pre><code id="highlighted" class="language-html"></code></pre>
+                    </div>
+                    <textarea id="editor" spellcheck="false" oninput="editor.dispatchEvent(new Event('change'));">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+  &lt;title&gt;Nemodian 2244-1 Quantum Demo&lt;/title&gt;
+  &lt;style&gt;
+    /* This section is intentionally verbose for testing the vertical scroll */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a73e8, #4ac94a);
+      color: white;
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      text-align: center;
+      color: #202124;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      color: #1a73e8;
+    }
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 12px 25px;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    /* Adding extra lines to force editor scrolling */
+    .dummy-line-1 {}
+    .dummy-line-2 {}
+    .dummy-line-3 {}
+    .dummy-line-4 {}
+    .dummy-line-5 {}
+    /* End of extra lines */
+  &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;div class="container"&gt;
+    &lt;h1&gt;AI Studio Code Cell&lt;/h1&gt;
+    &lt;p&gt;Edit the code above and click 'Run' to execute or use the prompt bar below for AI commands.&lt;/p&gt;
+    &lt;button&gt;Execute Demo&lt;/button&gt;
+  &lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</textarea>
+                </div>
+            </div>
+
+            <div id="ai-output-block">
+                <div class="output-header">
+                    <span>Output [1]</span>
+                    <span id="output-meta"></span>
+                </div>
+                <div id="ai-response-content" class="output-content">
+                    Click **▶ Run** or enter an AI prompt below to generate output.
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <footer>
+        <input id="prompt-input" placeholder="Enter AI prompt or command (e.g., 'Optimize the CSS', 'Add a feature') (Ctrl+Enter to send)">
+        <button id="send-button" class="primary">SEND AI</button>
+    </footer>
+
+    <div id="preview-panel" class="modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 1000; display: none; flex-direction: column;">
+        <div id="preview-header" style="padding: 10px; background: var(--ui-bg-light); border-bottom: 1px solid var(--ui-border); display: flex; justify-content: space-between; align-items: center;">
+            <span>HTML Preview</span>
+            <button id="close-preview">×</button>
+        </div>
+        <iframe id="preview-content" style="flex-grow: 1; border: none;"></iframe>
+    </div>
+    <div id="quantum-dashboard" class="modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1001; display: none; justify-content: center; align-items: center;">
+        <div id="dashboard-header" style="padding: 20px; background: var(--ui-bg-white); border-radius: 8px; max-width: 500px;">
+            <span>Quantum Agent Dashboard (Stub)</span>
+            <button id="close-dashboard" style="float: right;">×</button>
+            <div id="dashboard-content" style="margin-top: 10px;">Agents are operating at peak efficiency.</div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== QUANTUM AGENT CORE (Code Generation Logic) ====================
+        class QuantumAgentCore {
+            // (Constructor, initAgents, updateStatusBar, delay omitted for brevity, but exist)
+
+            constructor() {
+                this.agents = new Map();
+                this.isProcessing = false;
+                this.performanceMetrics = { startTime: null, endTime: null, agentTimes: new Map() };
+                this.initAgents();
+                this.updateStatusBar('info', 'Quantum AI: Ready');
+            }
+
+            initAgents() {
+                const agents = [
+                    { id: 'nexus', name: 'Nexus', role: 'Orchestrator' },
+                    { id: 'cognito', name: 'Cognito', role: 'Analyzer' },
+                    { id: 'relay', name: 'Relay', role: 'Communicator' },
+                    { id: 'sentinel', name: 'Sentinel', role: 'Monitor' },
+                    { id: 'echo', name: 'Echo', role: 'Reporter' }
+                ];
+                agents.forEach(agent => {
+                    this.agents.set(agent.id, { ...agent, status: 'IDLE', progress: 0 });
+                });
+            }
+
+            async processInput(prompt, currentCode, responseElement) {
+                if (this.isProcessing) {
+                    this.updateStatusBar('warn', 'System is already processing a request');
+                    throw new Error("System is already processing a request");
+                }
+
+                this.isProcessing = true;
+                this.performanceMetrics.startTime = Date.now();
+                this.updateStatusBar('info', 'Quantum AI: Processing...');
+                
+                // --- Real-Time Streaming Setup ---
+                responseElement.innerHTML = `
+                    <div style="color: var(--ui-primary); font-weight: 500; margin-bottom: 0.5rem;">Generating Analysis & Code...</div>
+                    <div id="analysis-stream"></div>
+                    <div style="margin-top: 1rem; color: var(--ui-text-dark); font-weight: 500;">Verbose Consensus Log:</div>
+                    <div id="verbose-stream" class="verbose-log">Agents Activated. Initiating parallel analysis...</div>
+                `;
+
+                const analysisStreamElement = document.getElementById('analysis-stream');
+                const verboseStreamElement = document.getElementById('verbose-stream');
+
+                // Simulate verbose thinking stream
+                const thinkingLog = this.generateThinkingLog(prompt, currentCode);
+                await this.streamText(verboseStreamElement, thinkingLog, 20);
+
+                // Determine if code replacement is necessary
+                const requiresCodeGeneration = prompt.toLowerCase().includes('optimize') || prompt.toLowerCase().includes('add') || prompt.toLowerCase().includes('change');
+
+                let finalAnalysis = '';
+                let newCode = currentCode;
+
+                if (requiresCodeGeneration) {
+                    // --- STEP 1: Generate New Code (Simulation) ---
+                    const generatedContent = this.generateNewCode(currentCode, prompt);
+                    newCode = generatedContent.code;
+                    finalAnalysis = `<span style="color: var(--ui-secondary); font-weight: bold;">[Code Injection]</span> New code generated and streamed to editor. ${generatedContent.analysis}`;
+                    
+                    // --- STEP 2: Stream New Code to the Editor ---
+                    await this.streamCodeToEditor(newCode);
+                    finalAnalysis += `<br><br>Stream complete. Review the changes in the Code Cell.`;
+
+                } else {
+                    // --- STEP 1: Generate Analysis Only ---
+                    const result = this.generateFinalResult(prompt, currentCode);
+                    finalAnalysis = `<div style="color: var(--ui-primary); font-weight: 500;">${result.analysis}</div>`;
+                    if (result.suggestions) {
+                         finalAnalysis += `<br><br>**Suggestions for improvement (Echo Report):**<ul style="padding-left: 20px;">`;
+                        result.suggestions.forEach(suggestion => {
+                            finalAnalysis += `<li>${suggestion}</li>`;
+                        });
+                        finalAnalysis += `</ul>`;
+                    }
+                }
+
+                await this.streamText(analysisStreamElement, finalAnalysis, 30);
+                
+                // Final update after stream ends
+                const metricsText = `<div style="margin-top: 1rem; font-size: 0.75rem; color: var(--ui-text-muted);">Time: ${Date.now() - this.performanceMetrics.startTime}ms</div>`;
+                responseElement.innerHTML += metricsText;
+                
+                this.performanceMetrics.endTime = Date.now();
+                this.isProcessing = false;
+                this.updateStatusBar('success', `Operation Complete in ${Date.now() - this.performanceMetrics.startTime}ms`);
+
+                return { analysis: finalAnalysis, code: newCode };
+            }
+
+            // --- NEW: Code Streaming Function ---
+            async streamCodeToEditor(newCode) {
+                const editorElement = document.getElementById('editor');
+                editorElement.value = ''; // Clear existing content
+                let currentCode = '';
+                
+                // Stream token by token (or chunk by chunk)
+                const tokens = newCode.split('\n'); // Split by lines for fast streaming
+                
+                for (let i = 0; i < tokens.length; i++) {
+                    // Stream lines
+                    currentCode += tokens[i] + (i < tokens.length - 1 ? '\n' : '');
+                    
+                    editorElement.value = currentCode;
+                    
+                    // Manually trigger the input handler to update line numbers/highlighting
+                    const event = new Event('input', { bubbles: true });
+                    editorElement.dispatchEvent(event);
+                    
+                    await this.delay(10); // Faster stream for code
+                }
+            }
+
+            // --- Code Generation Simulation ---
+            generateNewCode(oldCode, prompt) {
+                let analysis = "CSS modernization successful.";
+                let newStyleBlock = '';
+                
+                if (prompt.toLowerCase().includes('optimize')) {
+                    newStyleBlock = `&lt;style&gt;
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: #333 url('data:image/svg+xml;utf8,...') repeat; /* Subtle dark gray pattern */
+      color: #f0f0f0; /* Light text for dark background */
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(5px); /* Modern blur effect */
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+      max-width: 600px;
+      text-align: center;
+      color: #f0f0f0;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 15px;
+      color: var(--ui-secondary); /* Green highlight */
+    }
+    button {
+      background: var(--ui-primary);
+      color: white;
+      border: 1px solid white;
+      padding: 12px 25px;
+      border-radius: 5px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    button:hover {
+      background: #145cb3;
+    }
+    /* Redundant dummy lines removed by Cognito */
+  &lt;/style&gt;`;
+                    analysis = "CSS modernized to a dark, subtle theme with blur effect. All dummy lines were stripped for optimization.";
+                }
+                
+                // Replace the entire <style> block with the new block
+                const regex = /&lt;style&gt;[\s\S]*?&lt;\/style&gt;/;
+                const newCode = oldCode.replace(regex, newStyleBlock);
+
+                return { code: newCode, analysis: analysis };
+            }
+
+            generateThinkingLog(prompt, code) {
+                return `
+[T+000ms] Nexus: Orchestration initiated. Prompt: "${prompt}". Code length: ${code.length}.
+[T+100ms] Cognito: Core analysis confirms valid HTML structure. Identifying user intent...
+[T+250ms] Sentinel: **Action Required:** Code generation is necessary based on prompt. Switching security audit to pre-generation integrity check.
+[T+400ms] Relay: Prepping agent communication for iterative code synthesis.
+[T+600ms] Cognito: Analyzing current CSS. Detected outdated linear-gradient and redundant 'dummy-line' classes. Optimization strategy: Replace background with a modern dark theme using subtle texture and `backdrop-filter`.
+[T+900ms] Echo: Synthesizing the optimization plan into clean, production-ready tokens.
+[T+1200ms] Nexus: **Code Consensus Reached.** Final token output validated by Sentinel for syntax correctness.
+[T+1500ms] Relay: Initiating **Real-Time Code Injection** into the editor area... (Watch the code cell now).
+                `.trim();
+            }
+
+            // (streamText, generateFinalResult, updateStatusBar, delay omitted for brevity, but exist)
+
+            async streamText(element, text, delay) {
+                let currentText = '';
+                for (let i = 0; i < text.length; i++) {
+                    let char = text[i];
+                    if (element.id === 'analysis-stream' && char === '<') {
+                        let tagEnd = text.indexOf('>', i);
+                        if (tagEnd !== -1) {
+                            currentText += text.substring(i, tagEnd + 1);
+                            i = tagEnd;
+                        } else {
+                            currentText += char;
+                        }
+                    } else {
+                        currentText += char;
+                    }
+
+                    element.innerHTML = currentText;
+                    element.scrollTop = element.scrollHeight; 
+                    await this.delay(delay);
+                }
+            }
+            
+            generateFinalResult(prompt, code) {
+                const lines = code.split('\n').length;
+                let analysis = `Quantum analysis complete on ${lines} lines of code. No critical issues detected. Code quality is **High**.`;
+                let suggestions = ['Run the HTML Preview to ensure all styles render correctly.', 'Try adding a JavaScript interactivity layer to the demo.'];
+
+                return {
+                    analysis: analysis,
+                    suggestions: suggestions,
+                    metrics: { linesAnalyzed: lines, agentsUsed: ['nexus', 'cognito', 'relay', 'sentinel', 'echo'] },
+                    timestamp: new Date().toISOString()
+                };
+            }
+            
+            updateStatusBar(type, message) {
+                const statusMeta = document.getElementById('output-meta');
+                const aiIndicator = document.getElementById('ai-indicator');
+                const aiDot = document.getElementById('ai-dot-indicator');
+                
+                aiIndicator.textContent = message;
+                aiDot.classList.remove('connected');
+                aiDot.style.background = '#fa0000';
+
+                if (type === 'success') {
+                    aiDot.classList.add('connected');
+                    aiDot.style.background = 'var(--ui-secondary)';
+                } else if (type === 'info') {
+                    aiDot.classList.add('connected');
+                    aiDot.style.background = 'var(--ui-primary)';
+                } else if (type === 'warn') {
+                    aiDot.style.background = 'orange';
+                }
+                statusMeta.textContent = `Status: ${message}`;
+            }
+
+            delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+        }
+
+        // ==================== EDITOR LOGIC (Active Synchronization) ====================
+        const editor = document.getElementById('editor');
+        const highlighted = document.getElementById('highlighted');
+        const lineGutter = document.getElementById('line-gutter');
+        const aiOutputBlock = document.getElementById('ai-output-block');
+        const aiResponseContent = document.getElementById('ai-response-content');
+        const promptInput = document.getElementById('prompt-input');
+        // ... (other element definitions)
+
+        let historyStack = [], redoStack = [], quantumSystem;
+
+        function initEditor() {
+            renderEditor(editor.value);
+            pushHistory();
+            quantumSystem = new QuantumAgentCore();
+            setupEventListeners();
+        }
+
+        function setupEventListeners() {
+            editor.addEventListener('input', handleEditorInput);
+            editor.addEventListener('change', handleEditorInput);
+            editor.addEventListener('scroll', syncScroll); 
+            
+            document.getElementById('send-button').addEventListener('click', runQuantumAI);
+            document.getElementById('run-quantum-ai').addEventListener('click', runQuantumAI);
+            promptInput.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runQuantumAI(); }
+            });
+
+            document.getElementById('left-toggle').addEventListener('click', () => leftPanel.classList.toggle('open'));
+            document.getElementById('render-html').addEventListener('click', renderHTML);
+            document.getElementById('close-preview').addEventListener('click', closePreview);
+            
+            document.getElementById('show-dashboard').addEventListener('click', () => { document.getElementById('quantum-dashboard').style.display = 'flex'; });
+            document.getElementById('close-dashboard').addEventListener('click', () => { document.getElementById('quantum-dashboard').style.display = 'none'; });
+        }
+
+        function highlightAndRender(code) {
+            highlighted.textContent = code;
+            highlighted.innerHTML = code
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/".*?"/g, '<span class="token string">$&</span>')
+                .replace(/'.*?'/g, '<span class="token string">$&</span>')
+                .replace(/\b(function|return|if|else|for|while|var|let|const|meta|html|head|body|div|style)\b/g, '<span class="token keyword">$1</span>')
+                .replace(/&lt;\/?[\w\s="'-]+&gt;/g, '<span class="token tag">$&</span>');
+        }
+
+        function generateLineNumbers() {
+            const lines = editor.value.split('\n');
+            lineGutter.innerHTML = lines.map((_, i) => i + 1).join('<br>');
+            
+            const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
+            const paddingTop = parseFloat(getComputedStyle(editor).paddingTop);
+            const paddingBottom = parseFloat(getComputedStyle(editor).paddingBottom);
+            const contentHeight = lines.length * lineHeight + paddingTop + paddingBottom;
+            lineGutter.style.height = `${contentHeight}px`;
+        }
+
+        function renderEditor(code) {
+            editor.value = code;
+            highlightAndRender(code);
+            generateLineNumbers();
+            syncScroll();
+        }
+
+        function syncScroll() {
+            const scrollTop = editor.scrollTop;
+            const scrollLeft = editor.scrollLeft;
+            
+            highlighted.parentElement.scrollTop = scrollTop;
+            highlighted.parentElement.scrollLeft = scrollLeft;
+            lineGutter.scrollTop = scrollTop;
+        }
+
+        function pushHistory() {
+            const code = editor.value;
+            if (historyStack.length && historyStack[historyStack.length - 1] === code) return;
+            historyStack.push(code);
+            redoStack = [];
+        }
+        
+        function handleEditorInput() {
+            pushHistory();
+            highlightAndRender(editor.value);
+            generateLineNumbers();
+            syncScroll();
+        }
+
+        async function runQuantumAI() {
+            const prompt = promptInput.value.trim() || 'Analyze the code structure and provide optimization suggestions.';
+            if (!quantumSystem) { return; }
+
+            aiOutputBlock.style.display = 'block';
+            aiResponseContent.innerHTML = 'Agents activated... processing request...';
+
+            try {
+                await quantumSystem.processInput(prompt, editor.value, aiResponseContent);
+                promptInput.value = '';
+            } catch (error) {
+                aiResponseContent.innerHTML = `<span style="color: #fa0000; font-weight: bold;">Quantum AI Error:</span> ${error.message}`;
+            }
+        }
+
+        function renderHTML() {
+            try {
+                const blob = new Blob([editor.value], { type: 'text/html' });
+                document.getElementById('preview-content').src = URL.createObjectURL(blob);
+                document.getElementById('preview-panel').style.display = 'flex';
+                if (quantumSystem) quantumSystem.updateStatusBar('info', 'HTML preview rendered');
+            } catch (e) {
+                if (quantumSystem) quantumSystem.updateStatusBar('error', 'Error rendering HTML');
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-panel').style.display = 'none';
+            const src = document.getElementById('preview-content').src;
+            if (src && src.startsWith('blob:')) {
+                URL.revokeObjectURL(src);
+            }
+            if (quantumSystem) quantumSystem.updateStatusBar('info', 'HTML preview closed');
+        }
+
+        window.addEventListener('load', initEditor);
+    </script>
 </body>
 </html>
