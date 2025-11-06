@@ -237,10 +237,11 @@ const escapeHtml = (str: string) => {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 };
 
-const highlight = (text: string, language: string): string => {
+const highlight = (text: string, language: string, selectionStart: number, selectionEnd: number): string => {
     if (!text) return '';
     const tokens = tokenize(text, language);
 
+    let currentOffset = 0;
     return tokens
         .map((token) => {
             const isError = !!token.errorMessage;
@@ -248,9 +249,30 @@ const highlight = (text: string, language: string): string => {
             const titleAttr = isError ? `title="${safeTitle}"` : '';
             const className = isError ? typeToClassMap['error'] : typeToClassMap[token.type] || typeToClassMap['unknown'];
 
-            const escapedValue = escapeHtml(token.value);
+            let styledContent = escapeHtml(token.value);
 
-            return `<span class="${className}" ${titleAttr}>${escapedValue}</span>`;
+            // Apply selection highlighting if active and valid
+            if (selectionStart !== undefined && selectionEnd !== undefined && selectionStart < selectionEnd) {
+                const tokenStart = currentOffset;
+                const tokenEnd = currentOffset + token.value.length;
+
+                // Check for overlap between token and selection
+                const overlapStart = Math.max(tokenStart, selectionStart);
+                const overlapEnd = Math.min(tokenEnd, selectionEnd);
+
+                if (overlapStart < overlapEnd) {
+                    // There is an overlap, split the token's value
+                    const beforeSelection = escapeHtml(token.value.substring(0, overlapStart - tokenStart));
+                    const inSelection = escapeHtml(token.value.substring(overlapStart - tokenStart, overlapEnd - tokenStart));
+                    const afterSelection = escapeHtml(token.value.substring(overlapEnd - tokenStart));
+
+                    styledContent = `${beforeSelection}<span class="editor-selection">${inSelection}</span>${afterSelection}`;
+                }
+            }
+            
+            currentOffset += token.value.length; // Update offset for the next token
+
+            return `<span class="${className}" ${titleAttr}>${styledContent}</span>`;
         })
         .join('');
 };
@@ -261,6 +283,9 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
     const highlightRef = useRef<HTMLElement>(null);
     const linesRef = useRef<HTMLDivElement>(null);
     const [lines, setLines] = useState<number[]>([]);
+    // State to track selection in the textarea
+    const [selectionStart, setSelectionStart] = useState(0);
+    const [selectionEnd, setSelectionEnd] = useState(0);
 
     const syncScroll = useCallback(() => {
         if (textareaRef.current && highlightRef.current && linesRef.current) {
@@ -274,11 +299,18 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
     const handleContentChange = useCallback(
         (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             setContent(e.target.value);
+            // Update selection immediately after content change to keep it accurate
+            setSelectionStart(e.target.selectionStart);
+            setSelectionEnd(e.target.selectionEnd);
         },
         [setContent]
     );
 
-    const highlightedContent = useMemo(() => highlight(content + '\n', fileType), [content, fileType]);
+    // Memoize the highlighted content, now including selection info
+    const highlightedContent = useMemo(
+        () => highlight(content + '\n', fileType, selectionStart, selectionEnd),
+        [content, fileType, selectionStart, selectionEnd]
+    );
 
     useLayoutEffect(() => {
         const lineCount = content.split('\n').length;
@@ -289,8 +321,8 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         const textarea = textareaRef.current;
         if (!textarea) return;
 
-        const updateStats = () => {
-            const { selectionStart } = textarea;
+        const updateStatsAndSelection = () => {
+            const { selectionStart, selectionEnd } = textarea;
             const textToCursor = content.substring(0, selectionStart);
             const line = textToCursor.split('\n').length;
             const col = selectionStart - textToCursor.lastIndexOf('\n');
@@ -299,14 +331,19 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 lines: content.split('\n').length,
                 chars: content.length,
             });
+            setSelectionStart(selectionStart);
+            setSelectionEnd(selectionEnd);
         };
 
-        updateStats();
-        textarea.addEventListener('keyup', updateStats);
-        textarea.addEventListener('click', updateStats);
+        // Initial update and event listeners
+        updateStatsAndSelection(); // Call once on mount
+        textarea.addEventListener('keyup', updateStatsAndSelection);
+        textarea.addEventListener('click', updateStatsAndSelection);
+        textarea.addEventListener('select', updateStatsAndSelection); // Listen for selection changes
         return () => {
-            textarea.removeEventListener('keyup', updateStats);
-            textarea.removeEventListener('click', updateStats);
+            textarea.removeEventListener('keyup', updateStatsAndSelection);
+            textarea.removeEventListener('click', updateStatsAndSelection);
+            textarea.removeEventListener('select', updateStatsAndSelection);
         };
     }, [content, onStatsChange]);
 
@@ -320,6 +357,8 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             setContent(indentedValue);
             setTimeout(() => {
                 e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
+                setSelectionStart(start + 2); // Update selection state after tab
+                setSelectionEnd(start + 2);
             }, 0);
         }
     };
