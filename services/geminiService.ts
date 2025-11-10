@@ -9,81 +9,6 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY! });
 
-// Cache configuration for search grounding
-const CACHE_PREFIX = 'gemini_search_cache_';
-const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
-
-// Cache configuration for code completion
-const COMPLETION_CACHE_PREFIX = 'gemini_completion_cache_';
-const COMPLETION_CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Generates a unique cache key based on the prompt, context, and grounding parameters.
- * @param {string} prompt - The user's specific request.
- * @param {string} context - The current code or context from the editor.
- * @param {boolean} withSearch - Whether search grounding is enabled.
- * @param {boolean} withMaps - Whether maps grounding is enabled.
- * @param {number | null} latitude - Optional latitude for Maps grounding.
- * @param {number | null} longitude - Optional longitude for Maps grounding.
- * @returns {string} The cache key.
- */
-const getCacheKey = (
-    prompt: string,
-    context: string,
-    withSearch: boolean,
-    withMaps: boolean,
-    latitude: number | null,
-    longitude: number | null,
-): string => {
-    const keyData = { prompt, context, withSearch, withMaps, latitude, longitude };
-    return CACHE_PREFIX + btoa(JSON.stringify(keyData)); // Base64 encode for safer localStorage keys
-};
-
-/**
- * Loads cached data if available and not expired.
- * @param {string} key - The cache key.
- * @returns {{ code: string; groundingChunks?: GroundingChunk[] } | null} Cached data or null.
- */
-const loadFromCache = (key: string): { code: string; groundingChunks?: GroundingChunk[] } | null => {
-    try {
-        const cachedItem = localStorage.getItem(key);
-        if (cachedItem) {
-            const { timestamp, code, groundingChunks } = JSON.parse(cachedItem);
-            if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-                console.log(`Loading from cache: ${key}`);
-                return { code, groundingChunks };
-            } else {
-                console.log(`Cache expired for: ${key}`);
-                localStorage.removeItem(key); // Clean up expired cache
-            }
-        }
-    } catch (error) {
-        console.error('Error loading from cache:', error);
-        localStorage.removeItem(key); // Remove potentially corrupted cache entry
-    }
-    return null;
-};
-
-/**
- * Saves generated content and grounding chunks to cache.
- * @param {string} key - The cache key.
- * @param {string} code - The generated code.
- * @param {GroundingChunk[]} groundingChunks - The associated grounding chunks.
- */
-const saveToCache = (key: string, code: string, groundingChunks: GroundingChunk[]) => {
-    try {
-        const itemToCache = {
-            timestamp: Date.now(),
-            code,
-            groundingChunks,
-        };
-        localStorage.setItem(key, JSON.stringify(itemToCache));
-        console.log(`Saved to cache: ${key}`);
-    } catch (error) {
-        console.error('Error saving to cache:', error);
-    }
-};
-
 /**
  * Generates content as a stream with the "thinking" feature enabled and processes the stream.
  * This provides a more detailed, step-by-step generation process for complex tasks.
@@ -145,16 +70,6 @@ Produce only the final, complete, and production-ready code block as your respon
         delete config.toolConfig;
     }
 
-    // Attempt to load from cache if grounding is used
-    const cacheKey = getCacheKey(prompt, context, withSearch, withMaps, latitude, longitude);
-    if ((withSearch || withMaps) && cacheKey) {
-        const cachedResult = loadFromCache(cacheKey);
-        if (cachedResult) {
-            onUpdate(cachedResult); // Provide the complete cached result immediately
-            return;
-        }
-    }
-
     const stream = await ai.models.generateContentStream({
         model: 'gemini-2.5-pro',
         contents: fullPrompt,
@@ -196,107 +111,6 @@ Produce only the final, complete, and production-ready code block as your respon
             console.error('Error processing stream chunk. The stream will continue.', { error, chunk });
             // This ensures a single malformed chunk doesn't stop the entire process
         }
-    }
-
-    // After stream completes, save the final result to cache if grounding was used
-    if ((withSearch || withMaps) && cacheKey && accumulatedCode) {
-        saveToCache(cacheKey, accumulatedCode, allGroundingChunks);
-    }
-};
-
-/**
- * Requests code completion suggestions from the Gemini API.
- * Implements client-side caching to reduce redundant API calls for the same prefixes.
- * @param {string} code - The full code content.
- * @param {number} cursorOffset - The absolute character offset of the cursor.
- * @param {string} fileType - The language type of the file (e.g., 'js', 'html').
- * @returns {Promise<string[]>} A promise that resolves to an array of string suggestions.
- */
-export const requestCodeCompletion = async (
-    code: string,
-    cursorOffset: number,
-    fileType: string
-): Promise<string[]> => {
-    // Extract content before cursor
-    const contextBeforeCursor = code.substring(0, cursorOffset);
-    // A simple heuristic for what the user might be typing: the last word or identifier part
-    const lastWordMatch = contextBeforeCursor.match(/[\w.$]+$/);
-    const currentPrefix = lastWordMatch ? lastWordMatch[0] : '';
-
-    // Check cache first
-    const cacheKey = `${COMPLETION_CACHE_PREFIX}${fileType}:${currentPrefix}`;
-    try {
-        const cachedItem = localStorage.getItem(cacheKey);
-        if (cachedItem) {
-            const { timestamp, suggestions } = JSON.parse(cachedItem);
-            if (Date.now() - timestamp < COMPLETION_CACHE_EXPIRATION_MS) {
-                console.log(`Loading completion from cache: ${currentPrefix}`);
-                return suggestions;
-            } else {
-                localStorage.removeItem(cacheKey); // Clean up expired cache
-            }
-        }
-    } catch (error) {
-        console.error('Error loading completion from cache:', error);
-        localStorage.removeItem(cacheKey); // Remove potentially corrupted cache entry
-    }
-
-    const model = 'gemini-2.5-flash'; // Optimized for speed
-
-    // Craft a precise prompt
-    const prompt = `You are an expert code completion AI. Given the following code snippet and the cursor position, provide highly relevant code completion suggestions.
-The user has typed up to the cursor. Provide completions for the token or structure directly following the cursor.
-
-Code context leading to cursor (language: ${fileType}):
-\`\`\`${fileType}
-${contextBeforeCursor}
-\`\`\`
-
-Based on this context, provide 3 to 5 concise and direct code completion suggestions.
-The suggestions should complete the current line or offer the next logical code element.
-Do NOT generate entire functions, explanations, or code blocks. Just the raw completion strings.
-Return only a JSON array of strings, for example: ["suggestion1", "suggestion2", "suggestion3"].
-`;
-
-    try {
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: [{ parts: [{ text: prompt }] }],
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.STRING,
-                    },
-                },
-                // Small thinking budget for faster response, max output tokens for brevity
-                thinkingConfig: { thinkingBudget: 50 },
-                maxOutputTokens: 200, // Limit response size for completions
-            },
-        });
-
-        const jsonStr = response.text.trim();
-        const suggestions = JSON.parse(jsonStr);
-
-        if (!Array.isArray(suggestions) || !suggestions.every(s => typeof s === 'string')) {
-            console.error('Invalid completion response format:', suggestions);
-            return [];
-        }
-
-        // Cache the results
-        try {
-            localStorage.setItem(cacheKey, JSON.stringify({ suggestions, timestamp: Date.now() }));
-            console.log(`Saved completion to cache: ${currentPrefix}`);
-        } catch (cacheError) {
-            console.warn('Could not save completion to cache:', cacheError);
-        }
-
-        return suggestions;
-
-    } catch (error) {
-        console.error('Error requesting code completion:', error);
-        return [];
     }
 };
 

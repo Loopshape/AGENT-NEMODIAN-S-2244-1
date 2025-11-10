@@ -5,7 +5,7 @@ import { highlightBasic, escapeHtml } from '../utils/highlighter'; // Import sha
 
 /**
  * Determines the inline CSS styles for an AgentCard based on its status.
- * This provides immediate visual feedback on an neuron's state (e.g., pulsing when working, shaking on error).
+ * This provides immediate visual feedback on an agent's state (e.g., pulsing when working, shaking on error).
  * @param {Agent} agent - The agent object containing status and color information.
  * @returns {React.CSSProperties} A style object to be applied to the agent card's container.
  */
@@ -93,16 +93,7 @@ const AgentCard: React.FC<{ agent: Agent }> = ({ agent }) => (
                     />
                 </svg>
             )}
-            {/* Detailed Status Message */}
-            {typeof agent.content === 'string' ? (
-                <span className="flex-1 truncate" title={agent.content}>
-                    {agent.content}
-                </span>
-            ) : (
-                <span className="flex-1">
-                    {agent.content}
-                </span>
-            )}
+            {agent.content}
         </div>
     </div>
 );
