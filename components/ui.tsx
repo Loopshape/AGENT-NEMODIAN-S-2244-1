@@ -1,6 +1,8 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
-import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode } from '../types';
+import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode, GroundingChunk } from '../types';
+import { typeToClassMap, tokenize, escapeHtml, highlightBasic } from '../utils/highlighter'; // Import shared highlighter utilities
 
 interface HeaderProps {
     onToggleLeftPanel: () => void;
@@ -232,6 +234,11 @@ const FileTreeItem: React.FC<
 
                 {!isRenaming && (
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!isFolder && ( // Show "Open" button only for files
+                            <ActionButton title="Open File" onClick={() => onOpenFile(path)}>
+                                &#128220; {/* Document/File icon */}
+                            </ActionButton>
+                        )}
                         {isFolder && (
                             <>
                                 <ActionButton title="New File" onClick={() => rest.onCreateFile(path)}>
@@ -666,135 +673,7 @@ interface TerminalProps {
     onSubmit: (command: string) => void;
 }
 
-// --- START: Terminal Syntax Highlighter Logic ---
-const typeToClassMap: Record<string, string> = {
-    comment: 'text-slate-500 italic',
-    string: 'text-lime-400',
-    number: 'text-amber-500 font-semibold',
-    keyword: 'text-pink-400 font-semibold',
-    type: 'text-sky-300',
-    function: 'text-[#4ac94a]',
-    bracket: 'text-purple-400 font-bold',
-    op: 'text-slate-400',
-    id: 'text-slate-300',
-    tag: 'text-pink-400 font-semibold',
-    'attr-name': 'text-sky-300',
-    'attr-value': 'text-lime-400',
-    color: 'text-fuchsia-400 font-semibold',
-    property: 'text-sky-300',
-    selector: 'text-amber-500',
-    key: 'text-sky-300',
-    boolean: 'text-pink-400',
-    null: 'text-purple-400',
-    meta: 'text-cyan-400',
-    variable: 'text-teal-300',
-    'at-rule': 'text-purple-400',
-    unknown: 'text-slate-300',
-    error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
-};
-
-const languageRules: Record<string, { type: string; regex: RegExp }[]> = {
-    js: [
-        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
-        },
-        { type: 'boolean', regex: /^\b(true|false)\b/ },
-        { type: 'null', regex: /^\b(null|undefined)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ },
-        { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
-    ],
-    py: [
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ },
-        {
-            type: 'keyword',
-            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/,
-        },
-        { type: 'boolean', regex: /^\b(True|False)\b/ },
-        { type: 'null', regex: /^\b(None)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
-        { type: 'meta', regex: /^@\w+/ },
-        { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
-        { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-    ],
-    bash: [
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        {
-            type: 'keyword',
-            regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/,
-        },
-        {
-            type: 'function', // built-ins
-            regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/,
-        },
-        { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ },
-        { type: 'variable', regex: /^\$\{[^}]*\}/ },
-        { type: 'number', regex: /^\b\d+\b/ },
-        { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ },
-        { type: 'bracket', regex: /^[()]/ },
-    ],
-    json: [
-        { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
-        { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
-        { type: 'keyword', regex: /^\b(true|false|null)\b/ },
-        { type: 'op', regex: /^[:,]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-    ],
-    // Add other languages as needed
-};
-
-const tokenize = (text: string, language: string): { type: string; value: string }[] => {
-    const rules = languageRules[language] || [];
-    if (rules.length === 0) {
-        return [{ type: 'unknown', value: text }];
-    }
-
-    const tokens: { type: string; value: string }[] = [];
-    let position = 0;
-
-    while (position < text.length) {
-        let matched = false;
-        for (const rule of rules) {
-            const match = rule.regex.exec(text.slice(position));
-            if (match && match[0].length > 0) {
-                tokens.push({ type: rule.type, value: match[0] });
-                position += match[0].length;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            tokens.push({ type: 'unknown', value: text[position] });
-            position++;
-        }
-    }
-    return tokens;
-};
-
-const escapeHtml = (str: string) => {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-};
-
-const highlight = (text: string, language: string): string => {
-    if (!text) return '';
-    const tokens = tokenize(text, language);
-    return tokens
-        .map((token) => {
-            const className = typeToClassMap[token.type] || typeToClassMap['unknown'];
-            return `<span class="${className}">${escapeHtml(token.value)}</span>`;
-        })
-        .join('');
-};
-
+// --- START: Terminal Syntax Highlighter Logic (Refactored) ---
 const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => {
     const codeBlockRegex = /```(\w+)?\n([\s\S]+?)```/g;
     const parts: { type: 'text' | 'code'; content: string; language?: string }[] = [];
@@ -803,19 +682,22 @@ const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => 
 
     while ((match = codeBlockRegex.exec(content)) !== null) {
         if (match.index > lastIndex) {
+            // Text before the code block
             parts.push({ type: 'text', content: content.substring(lastIndex, match.index) });
         }
-        const language = match[1] || 'plaintext';
+        const language = match[1] || 'plaintext'; // Default to plaintext if language not specified
         const code = match[2];
         parts.push({ type: 'code', language, content: code });
         lastIndex = codeBlockRegex.lastIndex;
     }
 
     if (lastIndex < content.length) {
+        // Remaining text after the last code block
         parts.push({ type: 'text', content: content.substring(lastIndex) });
     }
 
     if (parts.length === 0) {
+        // If no code blocks found, treat entire content as text
         parts.push({ type: 'text', content });
     }
 
@@ -825,11 +707,12 @@ const FormattedTerminalOutput: React.FC<{ content: string }> = ({ content }) => 
                 if (part.type === 'code') {
                     return (
                         <pre key={index} className="bg-black/30 rounded p-2 my-1 overflow-x-auto text-xs">
-                            <code dangerouslySetInnerHTML={{ __html: highlight(part.content, part.language!) }} />
+                            <code dangerouslySetInnerHTML={{ __html: highlightBasic(part.content, part.language!) }} />
                         </pre>
                     );
                 }
-                return <span key={index}>{part.content}</span>;
+                // For regular text, use a basic span and ensure newlines are respected
+                return <span key={index} dangerouslySetInnerHTML={{ __html: escapeHtml(part.content).replace(/\n/g, '<br/>') }} />;
             })}
         </>
     );

@@ -1,4 +1,5 @@
 
+
 import type { ReactNode } from 'react';
 
 export type AgentName = 'nexus' | 'cognito' | 'relay' | 'sentinel' | 'echo' | 'oracle';
@@ -13,12 +14,28 @@ export interface Agent {
     color: string;
 }
 
+export interface MapsPlaceAnswerSource {
+    uri?: string;
+    title?: string;
+    reviewSnippets?: {
+        displayText?: string;
+        uri?: string;
+    }[];
+}
+
+export interface MapsGrounding {
+    uri?: string;
+    title?: string;
+    placeAnswerSources?: MapsPlaceAnswerSource[];
+}
+
 export interface GroundingChunk {
     web?: {
         uri: string;
         title: string;
         snippet?: string; // Added snippet for more detailed search info
     };
+    maps?: MapsGrounding; // Added for Google Maps grounding
 }
 
 export interface CodeReviewFinding {

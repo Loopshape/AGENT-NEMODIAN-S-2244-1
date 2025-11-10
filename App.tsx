@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type {
     Agent,
     AgentName,
@@ -145,8 +145,9 @@ const getLanguageFromPath = (path: string): string => {
 };
 
 const HELP_TEXT = `Quantum Fractal AI Terminal Commands:
-- run <prompt> [--search]: Executes a Quantum AI task on the currently open file. Use quotes for multi-word prompts.
+- run <prompt> [--search] [--maps]: Executes a Quantum AI task on the currently open file. Use quotes for multi-word prompts.
     --search: Enables Google Search grounding for up-to-date information.
+    --maps: Enables Google Maps grounding for location-based queries (requires geolocation permission).
 - orch <prompt> --agents <agent1>,<agent2>,...: Runs a Multi-Agent Consensus task on the open file.
     --agents: A comma-separated list of agent personas to use (e.g., "Performance Optimizer,Code Readability Advocate").
 - apply: Applies the last generated code from the terminal to the editor.
@@ -203,6 +204,35 @@ const App: React.FC = () => {
     ]);
     const [lastTerminalResult, setLastTerminalResult] = useState<string | null>(null);
 
+    const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [geolocationError, setGeolocationError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Request geolocation permission on component mount
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setUserLocation({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                    });
+                    setGeolocationError(null);
+                },
+                (error) => {
+                    console.warn('Geolocation error:', error);
+                    setGeolocationError(error.message);
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 5000,
+                    maximumAge: 0,
+                }
+            );
+        } else {
+            setGeolocationError('Geolocation is not supported by this browser.');
+        }
+    }, []); // Run once on mount
+
     const updateAgent = (name: AgentName, newStatus: Partial<Agent>) => {
         setAiState((prev) => ({
             ...prev,
@@ -242,6 +272,7 @@ const App: React.FC = () => {
             mode,
             selectedAgents,
             useSearch,
+            useMaps,
         }: {
             prompt: string;
             context: string;
@@ -249,6 +280,7 @@ const App: React.FC = () => {
             mode: AiMode;
             selectedAgents: string[];
             useSearch: boolean;
+            useMaps: boolean;
         }) => {
             setIsPromptModalOpen(false);
             if (aiState.isLoading) return;
@@ -266,6 +298,17 @@ const App: React.FC = () => {
                 groundingChunks: null,
                 codeReviewFindings: null,
             });
+
+            // Handle geolocation for Maps grounding
+            let currentLatitude: number | null = null;
+            let currentLongitude: number | null = null;
+            if (useMaps && userLocation) {
+                currentLatitude = userLocation.latitude;
+                currentLongitude = userLocation.longitude;
+                updateAgent('nexus', { status: 'working', content: 'Fetching geolocation data...' });
+                await new Promise((r) => setTimeout(r, 200));
+            }
+
 
             try {
                 if (mode === 'orchestrator') {
@@ -288,7 +331,7 @@ const App: React.FC = () => {
                     }
                 } else {
                     // single AI mode
-                    if (useSearch) {
+                    if (useSearch || useMaps) {
                         updateAgent('nexus', { status: 'working', content: 'Initiating grounded quantum query...' });
                         await new Promise((r) => setTimeout(r, 200));
                         updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
@@ -298,6 +341,9 @@ const App: React.FC = () => {
                             currentPrompt,
                             fullContext,
                             useSearch,
+                            useMaps,
+                            currentLatitude,
+                            currentLongitude,
                             (update) => {
                                 setAiState((prev) => ({
                                     ...prev,
@@ -308,7 +354,7 @@ const App: React.FC = () => {
                         )
                     );
 
-                    if (useSearch) {
+                    if (useSearch || useMaps) {
                         await new Promise((r) => setTimeout(r, 200));
                         updateAgent('relay', { status: 'done' });
                         updateAgent('cognito', { status: 'working', content: 'Analyzing grounded information...' });
@@ -317,7 +363,7 @@ const App: React.FC = () => {
                     }
                     updateAgent('echo', {
                         status: 'done',
-                        content: useSearch ? 'Grounded Quantum Solution Generated.' : 'Quantum Fractal Solution Generated.',
+                        content: (useSearch || useMaps) ? 'Grounded Quantum Solution Generated.' : 'Quantum Fractal Solution Generated.',
                     });
                 }
             } catch (error) {
@@ -327,7 +373,7 @@ const App: React.FC = () => {
                 setAiState((prev) => ({ ...prev, isLoading: false }));
             }
         },
-        [editorContent, aiState.isLoading]
+        [editorContent, aiState.isLoading, userLocation]
     );
 
     const handleSetContent = useCallback(
@@ -391,13 +437,37 @@ const App: React.FC = () => {
             case 'run': {
                 const prompt = args.find((arg) => !arg.startsWith('--'))?.replace(/"/g, '') || 'Analyze the code.';
                 const useSearch = args.includes('--search');
+                const useMaps = args.includes('--maps');
+
+                if (useMaps && !userLocation && !geolocationError) {
+                    addToHistory('error', 'Geolocation access is required for --maps grounding. Please grant permission.');
+                    if (navigator.geolocation) {
+                        navigator.geolocation.getCurrentPosition(
+                            () => addToHistory('system', 'Geolocation granted. Please retry command.'),
+                            (error) => addToHistory('error', `Geolocation permission denied: ${error.message}`)
+                        );
+                    }
+                    break;
+                } else if (useMaps && geolocationError) {
+                    addToHistory('error', `Maps grounding unavailable: ${geolocationError}`);
+                    break;
+                }
+
                 addToHistory('system', 'Invoking Quantum AI...');
                 try {
                     let result = '';
-                    await generateWithThinkingStream(prompt, editorContent, useSearch, (update) => {
-                        result = update.code;
-                        // We don't display chunks in terminal, just get final code
-                    });
+                    await generateWithThinkingStream(
+                        prompt,
+                        editorContent,
+                        useSearch,
+                        useMaps,
+                        userLocation?.latitude ?? null,
+                        userLocation?.longitude ?? null,
+                        (update) => {
+                            result = update.code;
+                            // We don't display chunks in terminal, just get final code
+                        }
+                    );
                     setLastTerminalResult(result);
                     addToHistory('output', result);
                 } catch (e) {
@@ -505,7 +575,10 @@ const App: React.FC = () => {
                 generateWithThinkingStream(
                     currentPrompt,
                     fullContext,
-                    false,
+                    false, // no search
+                    false, // no maps
+                    null,
+                    null,
                     (update) => {
                         setAiState((prev) => ({ ...prev, generatedCode: update.code }));
                     }
@@ -774,6 +847,8 @@ const App: React.FC = () => {
                 onSubmit={handleModalSubmit}
                 personas={personas as Persona[]}
                 initialState={initialModalState}
+                userLocation={userLocation}
+                geolocationError={geolocationError}
             />
             <Terminal
                 isOpen={isTerminalOpen}

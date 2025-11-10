@@ -1,4 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo } from 'react';
+import { typeToClassMap, tokenize, escapeHtml } from '../utils/highlighter'; // Import shared highlighter utilities
+import { requestCodeCompletion } from '../services/geminiService'; // Import the new completion service
+import { CodeCompletionDropdown } from './CodeCompletionDropdown'; // Import the new dropdown component
 
 interface EditorProps {
     content: string;
@@ -8,235 +11,16 @@ interface EditorProps {
     fontSize: number;
 }
 
-// --- START: Tokenizer-based Highlighter ---
+// --- START: Tokenizer-based Highlighter (using shared utils) ---
 
-const typeToClassMap: Record<string, string> = {
-    comment: 'text-slate-500 italic',
-    string: 'text-lime-400',
-    number: 'text-amber-500 font-semibold',
-    keyword: 'text-pink-400 font-semibold',
-    type: 'text-sky-300',
-    function: 'text-[#4ac94a]',
-    bracket: 'text-purple-400 font-bold',
-    op: 'text-slate-400',
-    id: 'text-slate-300',
-    tag: 'text-pink-400 font-semibold',
-    'attr-name': 'text-sky-300',
-    'attr-value': 'text-lime-400',
-    color: 'text-fuchsia-400 font-semibold',
-    property: 'text-sky-300',
-    selector: 'text-amber-500',
-    key: 'text-sky-300',
-    boolean: 'text-pink-400',
-    null: 'text-purple-400',
-    // New types for better highlighting
-    meta: 'text-cyan-400', // for doctype, processing instructions, etc.
-    variable: 'text-teal-300', // for PHP variables
-    'at-rule': 'text-purple-400', // for CSS @rules
-    unknown: 'text-slate-300',
-    error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
-};
-
-const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?: string }[]> = {
-    js: [
-        { type: 'error', regex: /^`[^`]*$/, errorMessage: 'Unterminated template literal.' },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string literal.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
-        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'string', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, // Regex
-        { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
-        },
-        { type: 'boolean', regex: /^\b(true|false)\b/ },
-        { type: 'null', regex: /^\b(null|undefined)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ },
-        { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    html: [
-        { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
-        { type: 'meta', regex: /^<!DOCTYPE[\s\S]*?>/i },
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^>/ },
-        { type: 'text', regex: /^[^<]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    css: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: 'Unterminated comment block.' },
-        { type: 'comment', regex: /^\/\*[\s\S]*?\*\// },
-        { type: 'at-rule', regex: /^@[\w\-]+/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ },
-        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ },
-        { type: 'function', regex: /^\b(?:url|var|calc|rgb|rgba|hsl|hsla)(?=\()/ },
-        { type: 'color', regex: /^#(?:[0-9a-fA-F]{3,8})\b/ },
-        { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s|deg|fr|ms)?\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(!important|auto|inherit|initial|unset|none|block|inline|inline-block|flex|grid|absolute|relative|fixed|static|sticky|solid|dashed|dotted|hidden|visible|scroll|uppercase|lowercase|capitalize|center|left|right|justify|start|end|bold|normal|italic)\b/i,
-        },
-        { type: 'op', regex: /^[:;,>+~]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    xml: [
-        { type: 'error', regex: /^<[\w\d\-:]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed XML tag.' },
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'meta', regex: /^<\?[\s\S]*?\?>/ },
-        { type: 'meta', regex: /^<!\[CDATA\[[\s\S]*?\]\]>/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-:]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-:]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^\/?>/ },
-        { type: 'text', regex: /^[^<]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    php: [
-        // This combines PHP and HTML. Order is crucial.
-        // 1. PHP-specific syntax first.
-        { type: 'meta', regex: /^<\?php|^\?>|<\?=/ },
-        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/ },
-        { type: 'variable', regex: /^\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*/ },
-        { type: 'string', regex: /^"(?:\\.|[^"\\])*"|^'(?:\\.|[^'\\])*'/ },
-        { type: 'number', regex: /^\b\d+(\.\d+)?(?:e[+-]?\d+)?\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(?:echo|if|else|elseif|while|for|foreach|function|return|const|class|new|public|protected|private|static|__halt_compiler|abstract|and|array|as|break|callable|case|catch|clone|continue|declare|default|die|do|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|finally|global|goto|implements|include|include_once|instanceof|insteadof|interface|isset|list|namespace|or|print|require|require_once|switch|throw|trait|try|unset|use|var|xor|yield|__CLASS__|__DIR__|__FILE__|__FUNCTION__|__LINE__|__METHOD__|__NAMESPACE__|__TRAIT__)\b/i,
-        },
-        { type: 'boolean', regex: /^\b(true|false)\b/i },
-        { type: 'null', regex: /^\bnull\b/i },
-        { type: 'function', regex: /^\b[a-zA-Z_][\w_]*(?=\s*\()/ },
-        { type: 'op', regex: /^->|=>|==|===|!=|!==|<=|>=|[-+*\/%<>&|^~?:.,;]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-
-        // 2. HTML syntax.
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^>/ },
-
-        // 3. Generic text and whitespace.
-        { type: 'text', regex: /^[^<>$]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    sql: [
-        { type: 'comment', regex: /^(--[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^'(?:[^']|'')*'/ }, // SQL strings use '' to escape '
-        { type: 'number', regex: /^\b-?\d+(\.\d+)?\b/ },
-        {
-            type: 'keyword',
-            regex: /^\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DATABASE|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP\sBY|ORDER\sBY|ASC|DESC|LIMIT|OFFSET|HAVING|AS|DISTINCT|COUNT|SUM|AVG|MAX|MIN|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|IN|LIKE|BETWEEN|IS|NULL|PRIMARY|KEY|FOREIGN|REFERENCES|UNIQUE|INDEX|VIEW)\b/i,
-        },
-        { type: 'boolean', regex: /^\b(TRUE|FALSE)\b/i},
-        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/i },
-        { type: 'id', regex: /^`[^`]*`|"[^"]*"/ }, // Quoted identifiers
-        { type: 'op', regex: /^[,;*<>=!%|&^~.\-+/]+/ },
-        { type: 'bracket', regex: /^[()]/ },
-        { type: 'id', regex: /^\b[a-zA-Z_]\w*\b/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    json: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
-        { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
-        { type: 'keyword', regex: /^\b(true|false|null)\b/ },
-        { type: 'op', regex: /^[:,]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    py: [
-        { type: 'error', regex: /^(?:'''[\s\S]*?$|"""[\s\S]*?$)/, errorMessage: 'Unterminated multi-line string.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ },
-        {
-            type: 'keyword',
-            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/,
-        },
-        { type: 'boolean', regex: /^\b(True|False)\b/ },
-        { type: 'null', regex: /^\b(None)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
-        { type: 'meta', regex: /^@\w+/ }, // Decorators
-        { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
-        { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    bash: [
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { 
-            type: 'keyword', 
-            regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/ 
-        },
-        {
-            type: 'function', // built-ins
-            regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/
-        },
-        { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ },
-        { type: 'variable', regex: /^\$\{[^}]*\}/ },
-        { type: 'number', regex: /^\b\d+\b/ },
-        { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ },
-        { type: 'bracket', regex: /^[()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-};
-
-interface Token {
-    type: string;
-    value: string;
-    errorMessage?: string;
-}
-
-const tokenize = (text: string, language: string): Token[] => {
-    const rules = languageRules[language] || [];
-    if (rules.length === 0) {
-        return [{ type: 'unknown', value: text }];
-    }
-
-    const tokens: Token[] = [];
-    let position = 0;
-
-    while (position < text.length) {
-        let matched = false;
-        for (const rule of rules) {
-            const match = rule.regex.exec(text.slice(position));
-            if (match && match[0].length > 0) {
-                // Ensure non-empty match
-                tokens.push({ type: rule.type, value: match[0], errorMessage: rule.errorMessage });
-                position += match[0].length;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            tokens.push({ type: 'unknown', value: text[position], errorMessage: `Invalid or unexpected token.` });
-            position++;
-        }
-    }
-    return tokens;
-};
-
-const escapeHtml = (str: string) => {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-};
-
+/**
+ * Highlights a given text, applying syntax highlighting and editor selection.
+ * @param {string} text - The input text to highlight.
+ * @param {string} language - The language identifier.
+ * @param {number} selectionStart - The start index of the editor selection (relative to `text`).
+ * @param {number} selectionEnd - The end index of the editor selection (relative to `text`).
+ * @returns {string} The HTML string with syntax highlighting and selection spans.
+ */
 const highlight = (text: string, language: string, selectionStart: number, selectionEnd: number): string => {
     if (!text) return '';
     const tokens = tokenize(text, language);
@@ -278,45 +62,265 @@ const highlight = (text: string, language: string, selectionStart: number, selec
 };
 // --- END: Tokenizer-based Highlighter ---
 
+const BUFFER_LINES = 20; // Number of extra lines to render above and below the viewport
+
 export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, onStatsChange, fontSize }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const highlightRef = useRef<HTMLElement>(null);
+    const highlightCodeRef = useRef<HTMLElement>(null); // Refers to the <code> element
     const linesRef = useRef<HTMLDivElement>(null);
-    const [lines, setLines] = useState<number[]>([]);
-    // State to track selection in the textarea
-    const [selectionStart, setSelectionStart] = useState(0);
-    const [selectionEnd, setSelectionEnd] = useState(0);
+    const editorMainAreaRef = useRef<HTMLDivElement>(null); // Ref for the relative container for dropdown
 
-    const syncScroll = useCallback(() => {
-        if (textareaRef.current && highlightRef.current && linesRef.current) {
-            const { scrollTop, scrollLeft } = textareaRef.current;
-            highlightRef.current.scrollTop = scrollTop;
-            highlightRef.current.scrollLeft = scrollLeft;
-            linesRef.current.scrollTop = scrollTop;
+    // Virtualization state
+    const [viewportHeight, setViewportHeight] = useState(0);
+    const [effectiveLineHeight, setEffectiveLineHeight] = useState(0);
+    const [startRenderedLine, setStartRenderedLine] = useState(0);
+    const [endRenderedLine, setEndRenderedLine] = useState(0);
+    const [paddingTop, setPaddingTop] = useState(0);
+    const [paddingBottom, setPaddingBottom] = useState(0);
+
+    // State to track selection in the textarea (full content indices)
+    const [selectionStartFull, setSelectionStartFull] = useState(0);
+    const [selectionEndFull, setSelectionEndFull] = useState(0);
+
+    // AI Completion state
+    const [showCompletion, setShowCompletion] = useState(false);
+    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [currentCompletionPrefix, setCurrentCompletionPrefix] = useState('');
+    const [currentCompletionStartIndex, setCurrentCompletionStartIndex] = useState(0); // Where the prefix starts in the full content
+    const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+    const [completionPosition, setCompletionPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+    const [isLoadingCompletion, setIsLoadingCompletion] = useState(false);
+    const completionTimeoutRef = useRef<number | null>(null);
+
+    const contentLines = useMemo(() => content.split('\n'), [content]);
+    const totalLines = contentLines.length;
+
+    // Calculate effective line height and viewport height on mount and font size change
+    useLayoutEffect(() => {
+        if (textareaRef.current) {
+            // Temporarily set height to auto to measure actual line height
+            textareaRef.current.style.height = 'auto';
+            const testLine = document.createElement('span');
+            testLine.style.display = 'block';
+            testLine.style.fontSize = `${fontSize}px`;
+            testLine.style.fontFamily = 'Fira Code, monospace';
+            testLine.textContent = 'M'; // Any character to measure height
+            document.body.appendChild(testLine);
+            const height = testLine.offsetHeight;
+            document.body.removeChild(testLine);
+            setEffectiveLineHeight(height);
+            textareaRef.current.style.height = '100%'; // Reset to full height
+            setViewportHeight(textareaRef.current.clientHeight);
+        }
+    }, [fontSize]);
+
+    // Update viewport height on resize
+    useEffect(() => {
+        const resizeObserver = new ResizeObserver(entries => {
+            if (entries[0] && textareaRef.current) {
+                setViewportHeight(textareaRef.current.clientHeight);
+            }
+        });
+
+        if (textareaRef.current) {
+            resizeObserver.observe(textareaRef.current);
+        }
+
+        return () => {
+            if (textareaRef.current) {
+                resizeObserver.unobserve(textareaRef.current);
+            }
+        };
+    }, []); // Only run once to set up observer
+
+    // Helper to get pixel position of the cursor for dropdown
+    const getCompletionPosition = useCallback((textarea: HTMLTextAreaElement, cursorOffset: number): { top: number; left: number } => {
+        if (!textarea || !textarea.value || cursorOffset < 0 || cursorOffset > textarea.value.length) {
+            return { top: 0, left: 0 };
+        }
+
+        const dummyDiv = document.createElement('div');
+        Object.assign(dummyDiv.style, {
+            position: 'absolute',
+            visibility: 'hidden',
+            whiteSpace: 'pre-wrap', // Essential for handling newlines correctly
+            fontFamily: getComputedStyle(textarea).fontFamily,
+            fontSize: getComputedStyle(textarea).fontSize,
+            lineHeight: getComputedStyle(textarea).lineHeight,
+            padding: getComputedStyle(textarea).padding,
+            border: getComputedStyle(textarea).border,
+            boxSizing: getComputedStyle(textarea).boxSizing,
+            width: `${textarea.clientWidth}px`, // Crucial to match text wrapping
+            height: `${textarea.clientHeight}px`,
+            overflow: 'auto', // Mimic scroll behavior
+            wordBreak: 'break-all', // Or 'normal', depends on editor's actual word-break behavior
+        });
+
+        const textBeforeCursor = textarea.value.substring(0, cursorOffset);
+        dummyDiv.textContent = textBeforeCursor;
+        
+        const cursorMarker = document.createElement('span'); // An empty span at the exact cursor position
+        dummyDiv.appendChild(cursorMarker);
+        dummyDiv.appendChild(document.createTextNode(textarea.value.substring(cursorOffset)));
+
+        document.body.appendChild(dummyDiv);
+
+        // Temporarily apply textarea's scroll to the dummyDiv to get correct scroll-adjusted position
+        dummyDiv.scrollTop = textarea.scrollTop;
+        dummyDiv.scrollLeft = textarea.scrollLeft;
+
+        const cursorRect = cursorMarker.getBoundingClientRect();
+        const editorMainArea = editorMainAreaRef.current;
+        if (!editorMainArea) {
+             document.body.removeChild(dummyDiv);
+             return { top: 0, left: 0 };
+        }
+        const editorMainAreaRect = editorMainArea.getBoundingClientRect();
+
+        document.body.removeChild(dummyDiv);
+
+        // Calculate position relative to the editor's main content area
+        const left = cursorRect.left - editorMainAreaRect.left;
+        const top = cursorRect.bottom - editorMainAreaRect.top;
+
+        return {
+            top: Math.max(0, top + 5), // Add a small vertical offset below cursor
+            left: Math.max(0, left),
+        };
+    }, [fontSize]);
+
+    // FIX: Moved `handleScroll` definition before `applyCompletion` as it's a dependency.
+    // Scroll handler and virtualization logic
+    const handleScroll = useCallback(
+        (e: React.UIEvent<HTMLTextAreaElement>) => {
+            if (!effectiveLineHeight || !viewportHeight) return;
+
+            const { scrollTop, scrollLeft } = e.currentTarget;
+            
+            // Sync horizontal scroll
+            if (highlightCodeRef.current && highlightCodeRef.current.parentElement) {
+                highlightCodeRef.current.parentElement.scrollLeft = scrollLeft;
+            }
+            if (linesRef.current) {
+                linesRef.current.scrollLeft = scrollLeft; // Adjust if line numbers can scroll horizontally
+            }
+
+            const firstVisibleLine = Math.floor(scrollTop / effectiveLineHeight);
+            const lastVisibleLine = Math.ceil((scrollTop + viewportHeight) / effectiveLineHeight);
+
+            const newStartRenderedLine = Math.max(0, firstVisibleLine - BUFFER_LINES);
+            const newEndRenderedLine = Math.min(totalLines, lastVisibleLine + BUFFER_LINES);
+
+            setStartRenderedLine(newStartRenderedLine);
+            setEndRenderedLine(newEndRenderedLine);
+
+            setPaddingTop(newStartRenderedLine * effectiveLineHeight);
+            setPaddingBottom(Math.max(0, (totalLines - newEndRenderedLine) * effectiveLineHeight));
+
+            // If completion is active, reposition it on scroll
+            if (showCompletion && textareaRef.current) {
+                setCompletionPosition(getCompletionPosition(textareaRef.current, selectionStartFull));
+            }
+
+        },
+        [effectiveLineHeight, viewportHeight, totalLines, showCompletion, selectionStartFull, getCompletionPosition]
+    );
+
+    const hideCompletion = useCallback(() => {
+        setShowCompletion(false);
+        setSuggestions([]);
+        setSelectedSuggestionIndex(0);
+        setCurrentCompletionPrefix('');
+        setCurrentCompletionStartIndex(0);
+        setIsLoadingCompletion(false);
+        if (completionTimeoutRef.current) {
+            clearTimeout(completionTimeoutRef.current);
         }
     }, []);
+
+    const applyCompletion = useCallback((suggestion: string) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const originalContent = textarea.value;
+        const newContent =
+            originalContent.substring(0, currentCompletionStartIndex) +
+            suggestion +
+            originalContent.substring(currentCompletionStartIndex + currentCompletionPrefix.length);
+
+        setContent(newContent); // Update editor content
+        
+        // Restore cursor position after applying suggestion
+        setTimeout(() => {
+            textarea.selectionStart = textarea.selectionEnd = currentCompletionStartIndex + suggestion.length;
+            setSelectionStartFull(textarea.selectionStart);
+            setSelectionEndFull(textarea.selectionEnd);
+            textarea.focus(); // Ensure textarea keeps focus
+            // Manually trigger scroll handler to update virtualization after content change
+            handleScroll({ currentTarget: textarea } as React.UIEvent<HTMLTextAreaElement>);
+        }, 0);
+
+        hideCompletion();
+    }, [currentCompletionStartIndex, currentCompletionPrefix.length, setContent, hideCompletion, handleScroll]);
+
+    // Debounced function to trigger completion check
+    const triggerCompletionCheck = useCallback(() => {
+        if (completionTimeoutRef.current) {
+            clearTimeout(completionTimeoutRef.current);
+        }
+        completionTimeoutRef.current = window.setTimeout(async () => {
+            const textarea = textareaRef.current;
+            if (!textarea) return;
+
+            const cursorOffset = textarea.selectionStart;
+            const textBeforeCursor = textarea.value.substring(0, cursorOffset);
+            
+            // Find the "word" before the cursor to complete. E.g., for "console.lo|", prefix is "lo"
+            // This regex tries to capture identifiers, numbers, property access (like .prop)
+            const wordMatch = textBeforeCursor.match(/[\w.$]+$/);
+            const prefix = wordMatch ? wordMatch[0] : '';
+            const prefixStartIndex = wordMatch ? cursorOffset - prefix.length : cursorOffset;
+
+            // Only trigger if a relevant prefix is typed (at least 2 chars or ends with '.')
+            if (prefix.length >= 2 || prefix.endsWith('.')) {
+                setIsLoadingCompletion(true);
+                setCurrentCompletionPrefix(prefix);
+                setCurrentCompletionStartIndex(prefixStartIndex);
+                setCompletionPosition(getCompletionPosition(textarea, cursorOffset));
+
+                try {
+                    const fetchedSuggestions = await requestCodeCompletion(textarea.value, cursorOffset, fileType);
+                    if (fetchedSuggestions.length > 0) {
+                        setSuggestions(fetchedSuggestions);
+                        setShowCompletion(true);
+                        setSelectedSuggestionIndex(0);
+                    } else {
+                        hideCompletion();
+                    }
+                } catch (error) {
+                    console.error("Completion request failed:", error);
+                    hideCompletion();
+                } finally {
+                    setIsLoadingCompletion(false);
+                }
+            } else {
+                hideCompletion();
+            }
+        }, 300); // Debounce for 300ms
+    }, [fileType, getCompletionPosition, hideCompletion]); // Added hideCompletion to dependencies for consistency
 
     const handleContentChange = useCallback(
         (e: React.ChangeEvent<HTMLTextAreaElement>) => {
             setContent(e.target.value);
             // Update selection immediately after content change to keep it accurate
-            setSelectionStart(e.target.selectionStart);
-            setSelectionEnd(e.target.selectionEnd);
+            setSelectionStartFull(e.target.selectionStart);
+            setSelectionEndFull(e.target.selectionEnd);
+            triggerCompletionCheck(); // Trigger debounced completion check
         },
-        [setContent]
+        [setContent, triggerCompletionCheck]
     );
 
-    // Memoize the highlighted content, now including selection info
-    const highlightedContent = useMemo(
-        () => highlight(content + '\n', fileType, selectionStart, selectionEnd),
-        [content, fileType, selectionStart, selectionEnd]
-    );
-
-    useLayoutEffect(() => {
-        const lineCount = content.split('\n').length;
-        setLines(Array.from({ length: lineCount }, (_, i) => i + 1));
-    }, [content]);
-
+    // Update stats and selection positions
     useEffect(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
@@ -331,8 +335,16 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 lines: content.split('\n').length,
                 chars: content.length,
             });
-            setSelectionStart(selectionStart);
-            setSelectionEnd(selectionEnd);
+            setSelectionStartFull(selectionStart);
+            setSelectionEndFull(selectionEnd);
+            
+            // Re-trigger scroll to ensure virtualization state is consistent with potential programmatic scroll or keyboard navigation
+            handleScroll({ currentTarget: textarea } as React.UIEvent<HTMLTextAreaElement>);
+
+            // If cursor moved and completion is active, update its position
+            if (showCompletion) {
+                setCompletionPosition(getCompletionPosition(textarea, selectionStart));
+            }
         };
 
         // Initial update and event listeners
@@ -344,11 +356,39 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             textarea.removeEventListener('keyup', updateStatsAndSelection);
             textarea.removeEventListener('click', updateStatsAndSelection);
             textarea.removeEventListener('select', updateStatsAndSelection);
+            if (completionTimeoutRef.current) {
+                clearTimeout(completionTimeoutRef.current);
+            }
         };
-    }, [content, onStatsChange]);
+    }, [content, onStatsChange, handleScroll, showCompletion, getCompletionPosition]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Tab') {
+        if (showCompletion) {
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    setSelectedSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    setSelectedSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (suggestions[selectedSuggestionIndex]) {
+                        applyCompletion(suggestions[selectedSuggestionIndex]);
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    hideCompletion();
+                    break;
+                // If other keys are pressed, let default behavior happen and completion will re-evaluate
+            }
+        }
+        
+        // Handle Tab key for indentation
+        if (e.key === 'Tab' && !e.shiftKey) { // Only handle plain tab for indentation
             e.preventDefault();
             const start = e.currentTarget.selectionStart;
             const end = e.currentTarget.selectionEnd;
@@ -357,45 +397,128 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             setContent(indentedValue);
             setTimeout(() => {
                 e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
-                setSelectionStart(start + 2); // Update selection state after tab
-                setSelectionEnd(start + 2);
+                setSelectionStartFull(start + 2); // Update selection state after tab
+                setSelectionEndFull(start + 2);
             }, 0);
+        } else if (e.key === 'Tab' && e.shiftKey) { // Handle Shift+Tab for dedentation
+            e.preventDefault();
+            const start = e.currentTarget.selectionStart;
+            const end = e.currentTarget.selectionEnd;
+            const value = e.currentTarget.value;
+
+            // Find the start of the current line
+            const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+            const textBefore = value.substring(0, lineStart);
+            const textAfter = value.substring(lineStart);
+
+            // Check if the line starts with two spaces
+            if (textAfter.startsWith('  ')) {
+                const dedentedValue = textBefore + textAfter.substring(2);
+                setContent(dedentedValue);
+                setTimeout(() => {
+                    e.currentTarget.selectionStart = e.currentTarget.selectionEnd = Math.max(lineStart, start - 2);
+                    setSelectionStartFull(e.currentTarget.selectionStart);
+                    setSelectionEndFull(e.currentTarget.selectionEnd);
+                }, 0);
+            }
         }
     };
+
+    // Slice content for rendering and calculate selection relative to sliced content
+    const renderedContentLines = useMemo(() => {
+        return contentLines.slice(startRenderedLine, endRenderedLine);
+    }, [contentLines, startRenderedLine, endRenderedLine]);
+
+    const renderedContent = useMemo(() => {
+        return renderedContentLines.join('\n');
+    }, [renderedContentLines]);
+
+    const selectionStartRelative = useMemo(() => {
+        if (selectionStartFull === 0) return 0;
+        // Calculate offset from start of full content to start of rendered content
+        const offsetToRenderedStart = contentLines.slice(0, startRenderedLine).join('\n').length + (startRenderedLine > 0 ? 1 : 0); // +1 for newline character if not first line
+
+        return Math.max(0, selectionStartFull - offsetToRenderedStart);
+    }, [selectionStartFull, startRenderedLine, contentLines]);
+
+    const selectionEndRelative = useMemo(() => {
+        if (selectionEndFull === 0) return 0;
+        const offsetToRenderedStart = contentLines.slice(0, startRenderedLine).join('\n').length + (startRenderedLine > 0 ? 1 : 0);
+
+        return Math.max(0, selectionEndFull - offsetToRenderedStart);
+    }, [selectionEndFull, startRenderedLine, contentLines]);
+
+
+    // Memoize the highlighted content, now including relative selection info
+    const highlightedContent = useMemo(
+        () => highlight(renderedContent + '\n', fileType, selectionStartRelative, selectionEndRelative),
+        [renderedContent, fileType, selectionStartRelative, selectionEndRelative]
+    );
+
+    // Memoize line numbers for rendering
+    const renderedLineNumbers = useMemo(() => {
+        const lines = [];
+        for (let i = startRenderedLine; i < endRenderedLine; i++) {
+            lines.push(i + 1);
+        }
+        return lines.map((num) => (
+            <div key={num}>{num}</div>
+        ));
+    }, [startRenderedLine, endRenderedLine]);
 
     return (
         <div className="flex-1 flex relative bg-[#22241e] overflow-hidden">
             <div
                 ref={linesRef}
-                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs"
-                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px` }}
+                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-hidden"
+                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}
             >
-                {lines.map((num) => (
-                    <div key={num}>{num}</div>
-                ))}
+                {renderedLineNumbers}
             </div>
-            <div className="relative flex-1 h-full">
+            <div ref={editorMainAreaRef} className="relative flex-1 h-full"> {/* This div is now relative for dropdown positioning */}
+                {/* The transparent textarea holds the full content and is the source of truth for scrolling and editing */}
                 <textarea
                     ref={textareaRef}
                     value={content}
                     onChange={handleContentChange}
-                    onScroll={syncScroll}
+                    onScroll={handleScroll}
                     onKeyDown={handleKeyDown}
                     spellCheck="false"
-                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal"
+                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal z-10"
                     style={{ lineHeight: '1.5em', fontSize: `${fontSize}px` }}
                     aria-label="Code Editor"
                 />
+                {/* The pre element displays the highlighted (virtualized) content */}
                 <pre
                     className="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-hidden"
-                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px` }}
+                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}
                     aria-hidden="true"
                 >
                     <code
-                        ref={highlightRef}
+                        ref={highlightCodeRef}
                         dangerouslySetInnerHTML={{ __html: highlightedContent }}
                     />
                 </pre>
+
+                {showCompletion && (
+                    <CodeCompletionDropdown
+                        suggestions={suggestions}
+                        selectedSuggestionIndex={selectedSuggestionIndex}
+                        position={completionPosition}
+                        onSelect={applyCompletion}
+                        onClose={hideCompletion}
+                        fontSize={fontSize}
+                    />
+                )}
+                {isLoadingCompletion && (
+                    <div className="absolute z-50 text-xs text-gray-400 p-1 flex items-center" style={{ top: completionPosition.top + 5, left: completionPosition.left }}>
+                        <div className="quantum-spinner w-3 h-3 inline-block mr-1.5 relative">
+                            <div className="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div>
+                            <div className="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div>
+                        </div>
+                        AI Thinking...
+                    </div>
+                )}
             </div>
         </div>
     );

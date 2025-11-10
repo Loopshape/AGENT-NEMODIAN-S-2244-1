@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Persona } from '../types';
 import type { AiMode } from '../App';
+import { highlightBasic, escapeHtml } from '../utils/highlighter'; // Import shared highlighter utilities
 
 interface PromptModalProps {
     isOpen: boolean;
@@ -12,9 +13,12 @@ interface PromptModalProps {
         mode: AiMode;
         selectedAgents: string[];
         useSearch: boolean;
+        useMaps: boolean;
     }) => void;
     personas: Persona[];
     initialState: { prompt: string; mode: AiMode; snippet?: string } | null;
+    userLocation: { latitude: number; longitude: number } | null;
+    geolocationError: string | null;
 }
 
 /**
@@ -68,266 +72,20 @@ const AgentCard: React.FC<{ persona: Persona; selected: boolean; onClick: () => 
     </button>
 );
 
-// --- START: Tokenizer-based Highlighter (from Editor.tsx) ---
-const typeToClassMap: Record<string, string> = {
-    comment: 'text-slate-500 italic',
-    string: 'text-lime-400',
-    number: 'text-amber-500 font-semibold',
-    keyword: 'text-pink-400 font-semibold',
-    type: 'text-sky-300',
-    function: 'text-[#4ac94a]',
-    bracket: 'text-purple-400 font-bold',
-    op: 'text-slate-400',
-    id: 'text-slate-300',
-    tag: 'text-pink-400 font-semibold',
-    'attr-name': 'text-sky-300',
-    'attr-value': 'text-lime-400',
-    color: 'text-fuchsia-400 font-semibold',
-    property: 'text-sky-300',
-    selector: 'text-amber-500',
-    key: 'text-sky-300',
-    boolean: 'text-pink-400',
-    null: 'text-purple-400',
-    // New types for better highlighting
-    meta: 'text-cyan-400', // for doctype, processing instructions, etc.
-    variable: 'text-teal-300', // for PHP variables
-    'at-rule': 'text-purple-400', // for CSS @rules
-    unknown: 'text-slate-300',
-    error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
-};
-
-const languageRules: Record<string, { type: string; regex: RegExp; errorMessage?: string }[]> = {
-    js: [
-        { type: 'error', regex: /^`[^`]*$/, errorMessage: 'Unterminated template literal.' },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string literal.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
-        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'string', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, // Regex
-        { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
-        },
-        { type: 'boolean', regex: /^\b(true|false)\b/ },
-        { type: 'null', regex: /^\b(null|undefined)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_$][\w$]*(?=\s*\()/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'op', regex: /^=>|\.\.\.|==|===|!=|!==|<=|>=|[-+*/%=<>!&|^~?:.,;]/ },
-        { type: 'id', regex: /^\b[a-zA-Z_$][\w$]*\b/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    html: [
-        { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
-        { type: 'meta', regex: /^<!DOCTYPE[\s\S]*?>/i },
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^>/ },
-        { type: 'text', regex: /^[^<]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    css: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^\/\*[\s\S]*?$/, errorMessage: 'Unterminated comment block.' },
-        { type: 'comment', regex: /^\/\*[\s\S]*?\*\// },
-        { type: 'at-rule', regex: /^@[\w\-]+/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ },
-        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ },
-        { type: 'function', regex: /^\b(?:url|var|calc|rgb|rgba|hsl|hsla)(?=\()/ },
-        { type: 'color', regex: /^#(?:[0-9a-fA-F]{3,8})\b/ },
-        { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s|deg|fr|ms)?\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(!important|auto|inherit|initial|unset|none|block|inline|inline-block|flex|grid|absolute|relative|fixed|static|sticky|solid|dashed|dotted|hidden|visible|scroll|uppercase|lowercase|capitalize|center|left|right|justify|start|end|bold|normal|italic)\b/i,
-        },
-        { type: 'op', regex: /^[:;,>+~]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    xml: [
-        { type: 'error', regex: /^<[\w\d\-:]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed XML tag.' },
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'meta', regex: /^<\?[\s\S]*?\?>/ },
-        { type: 'meta', regex: /^<!\[CDATA\[[\s\S]*?\]\]>/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-:]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-:]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^\/?>/ },
-        { type: 'text', regex: /^[^<]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    php: [
-        // This combines PHP and HTML. Order is crucial.
-        // 1. PHP-specific syntax first.
-        { type: 'meta', regex: /^<\?php|^\?>|<\?=/ },
-        { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/ },
-        { type: 'variable', regex: /^\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*/ },
-        { type: 'string', regex: /^"(?:\\.|[^"\\])*"|^'(?:\\.|[^'\\])*'/ },
-        { type: 'number', regex: /^\b\d+(\.\d+)?(?:e[+-]?\d+)?\b/i },
-        {
-            type: 'keyword',
-            regex: /^\b(?:echo|if|else|elseif|while|for|foreach|function|return|const|class|new|public|protected|private|static|__halt_compiler|abstract|and|array|as|break|callable|case|catch|clone|continue|declare|default|die|do|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|finally|global|goto|implements|include|include_once|instanceof|insteadof|interface|isset|list|namespace|or|print|require|require_once|switch|throw|trait|try|unset|use|var|xor|yield|__CLASS__|__DIR__|__FILE__|__FUNCTION__|__LINE__|__METHOD__|__NAMESPACE__|__TRAIT__)\b/i,
-        },
-        { type: 'boolean', regex: /^\b(true|false)\b/i },
-        { type: 'null', regex: /^\bnull\b/i },
-        { type: 'function', regex: /^\b[a-zA-Z_][\w_]*(?=\s*\()/ },
-        { type: 'op', regex: /^->|=>|==|===|!=|!==|<=|>=|[-+*\/%<>&|^~?:.,;]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-
-        // 2. HTML syntax.
-        { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
-        { type: 'op', regex: /^=/ },
-        { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'tag', regex: /^>/ },
-
-        // 3. Generic text and whitespace.
-        { type: 'text', regex: /^[^<>$]+/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    sql: [
-        { type: 'comment', regex: /^(--[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^'(?:[^']|'')*'/ }, // SQL strings use '' to escape '
-        { type: 'number', regex: /^\b-?\d+(\.\d+)?\b/ },
-        {
-            type: 'keyword',
-            regex: /^\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|DATABASE|ALTER|DROP|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP\sBY|ORDER\sBY|ASC|DESC|LIMIT|OFFSET|HAVING|AS|DISTINCT|COUNT|SUM|AVG|MAX|MIN|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|IN|LIKE|BETWEEN|IS|NULL|PRIMARY|KEY|FOREIGN|REFERENCES|UNIQUE|INDEX|VIEW)\b/i,
-        },
-        { type: 'boolean', regex: /^\b(TRUE|FALSE)\b/i},
-        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/i },
-        { type: 'id', regex: /^`[^`]*`|"[^"]*"/ }, // Quoted identifiers
-        { type: 'op', regex: /^[,;*<>=!%|&^~.\-+/]+/ },
-        { type: 'bracket', regex: /^[()]/ },
-        { type: 'id', regex: /^\b[a-zA-Z_]\w*\b/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    json: [
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'key', regex: /^"(?:\\.|[^"])*"(?=\s*:)/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"/ },
-        { type: 'number', regex: /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i },
-        { type: 'keyword', regex: /^\b(true|false|null)\b/ },
-        { type: 'op', regex: /^[:,]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    py: [
-        { type: 'error', regex: /^(?:'''[\s\S]*?$|"""[\s\S]*?$)/, errorMessage: 'Unterminated multi-line string.' },
-        { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string.' },
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^(?:[furbFUBR]{0,2})?(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'[^'\n]*'|"[^"\n]*")/ },
-        {
-            type: 'keyword',
-            regex: /^\b(def|return|if|else|elif|for|while|import|from|as|class|try|except|finally|with|lambda|yield|in|is|not|and|or|pass|continue|break|async|await|assert|del|global|nonlocal|raise)\b/,
-        },
-        { type: 'boolean', regex: /^\b(True|False)\b/ },
-        { type: 'null', regex: /^\b(None)\b/ },
-        { type: 'function', regex: /^\b[a-zA-Z_]\w*(?=\s*\()/ },
-        { type: 'meta', regex: /^@\w+/ }, // Decorators
-        { type: 'number', regex: /^\b\d+(\.\d+)?\b/ },
-        { type: 'op', regex: /^[-+*/%=<>!&|^~:.,;@]/ },
-        { type: 'bracket', regex: /^[\[\]{}()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-    bash: [
-        { type: 'comment', regex: /^#[^\n]*/ },
-        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { 
-            type: 'keyword', 
-            regex: /^\b(if|then|else|elif|fi|case|esac|for|select|while|until|do|done|in|function|time|coproc)\b/ 
-        },
-        {
-            type: 'function', // built-ins
-            regex: /^\b(alias|bg|bind|break|builtin|caller|cd|command|compgen|complete|compopt|continue|declare|dirs|disown|echo|enable|eval|exec|exit|export|false|fc|fg|getopts|hash|help|history|jobs|kill|let|local|logout|mapfile|popd|printf|pushd|pwd|read|readarray|readonly|return|set|shift|shopt|source|suspend|test|times|trap|true|type|typeset|ulimit|umask|unalias|unset|wait)\b/
-        },
-        { type: 'variable', regex: /^\$([a-zA-Z_]\w*|\d+|\?|#|@|\*|\$)/ },
-        { type: 'variable', regex: /^\$\{[^}]*\}/ },
-        { type: 'number', regex: /^\b\d+\b/ },
-        { type: 'op', regex: /^(\[\[|\]\]|\|\||&&|;|\||&|>|<|>>|<<|`)/ },
-        { type: 'bracket', regex: /^[()]/ },
-        { type: 'whitespace', regex: /^\s+/ },
-    ],
-};
-
-interface Token {
-    type: string;
-    value: string;
-    errorMessage?: string;
-}
-
-const tokenize = (text: string, language: string): Token[] => {
-    const rules = languageRules[language] || [];
-    if (rules.length === 0) {
-        return [{ type: 'unknown', value: text }];
-    }
-
-    const tokens: Token[] = [];
-    let position = 0;
-
-    while (position < text.length) {
-        let matched = false;
-        for (const rule of rules) {
-            const match = rule.regex.exec(text.slice(position));
-            if (match && match[0].length > 0) {
-                // Ensure non-empty match
-                tokens.push({ type: rule.type, value: match[0], errorMessage: rule.errorMessage });
-                position += match[0].length;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) {
-            tokens.push({ type: 'unknown', value: text[position], errorMessage: `Invalid or unexpected token.` });
-            position++;
-        }
-    }
-    return tokens;
-};
-
-const escapeHtml = (str: string) => {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-};
-
-const highlight = (text: string, language: string): string => {
-    if (!text) return '';
-    const tokens = tokenize(text, language);
-
-    return tokens
-        .map((token) => {
-            const isError = !!token.errorMessage;
-            const safeTitle = token.errorMessage?.replace(/"/g, '&quot;');
-            const titleAttr = isError ? `title="${safeTitle}"` : '';
-            const className = isError ? typeToClassMap['error'] : typeToClassMap[token.type] || typeToClassMap['unknown'];
-
-            const escapedValue = escapeHtml(token.value);
-
-            return `<span class="${className}" ${titleAttr}>${escapedValue}</span>`;
-        })
-        .join('');
-};
-// --- END: Tokenizer-based Highlighter ---
-
 /**
  * A modal for users to enter prompts, configure AI settings, and submit requests to the Gemini API.
  * It supports different modes like single AI, multi-agent orchestrator, and search-grounded queries.
  * @param {PromptModalProps} props - The component props.
  * @returns {React.ReactElement | null} The rendered modal or null if not open.
  */
-export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSubmit, personas, initialState }) => {
+export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSubmit, personas, initialState, userLocation, geolocationError }) => {
     const [prompt, setPrompt] = useState('');
     const [context, setContext] = useState('');
     const [snippet, setSnippet] = useState('');
     const [mode, setMode] = useState<AiMode>('ai');
     const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
     const [useSearch, setUseSearch] = useState(false);
+    const [useMaps, setUseMaps] = useState(false);
 
     const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -338,6 +96,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
             setSnippet('');
             setSelectedAgents([]);
             setUseSearch(false);
+            setUseMaps(false);
 
             // Set initial state from props
             if (initialState) {
@@ -365,12 +124,14 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
 
     const handleSubmit = () => {
         if (isSubmitDisabled) return;
-        onSubmit({ prompt, context, snippet, mode, selectedAgents, useSearch });
+        onSubmit({ prompt, context, snippet, mode, selectedAgents, useSearch, useMaps });
     };
 
     if (!isOpen) return null;
 
     const isSubmitDisabled = mode === 'orchestrator' && selectedAgents.length < 2;
+
+    const disableMapsCheckbox = !userLocation && !geolocationError; // Disable if no location or no error yet
 
     return (
         <div
@@ -396,7 +157,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                     </div>
 
                     {mode === 'ai' && (
-                        <div className="pt-2">
+                        <div className="pt-2 flex flex-col gap-2">
                             <label
                                 htmlFor="useSearch"
                                 className="flex items-center gap-3 text-sm text-[#f0f0e0] cursor-pointer"
@@ -415,6 +176,35 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                     </span>
                                 </div>
                             </label>
+
+                            <label
+                                htmlFor="useMaps"
+                                className={`flex items-center gap-3 text-sm text-[#f0f0e0] ${disableMapsCheckbox ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    id="useMaps"
+                                    checked={useMaps}
+                                    onChange={(e) => setUseMaps(e.target.checked)}
+                                    disabled={disableMapsCheckbox}
+                                    className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                />
+                                <div>
+                                    <span className="font-bold">Enable Maps Grounding</span>
+                                    <span className="text-xs text-gray-400 font-normal block">
+                                        For location-based information from Google Maps.
+                                        {!userLocation && !geolocationError && (
+                                            <span className="text-yellow-400 ml-1"> (Waiting for geolocation...)</span>
+                                        )}
+                                        {geolocationError && (
+                                            <span className="text-red-400 ml-1"> (Geolocation error: {geolocationError})</span>
+                                        )}
+                                        {userLocation && (
+                                            <span className="text-green-400 ml-1"> (Using current location)</span>
+                                        )}
+                                    </span>
+                                </div>
+                            </label>
                         </div>
                     )}
 
@@ -428,8 +218,8 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={
-                                useSearch
-                                    ? 'Ask a question for real-time search...'
+                                useSearch || useMaps
+                                    ? 'Ask a question for real-time search or maps...'
                                     : mode === 'orchestrator'
                                     ? 'Describe the task for the agent collective...'
                                     : 'Describe what you want to generate, refactor, or optimize...'
@@ -480,7 +270,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                 className="absolute top-0 left-0 w-full h-full p-2 font-mono pointer-events-none overflow-y-auto text-sm"
                                 aria-hidden="true"
                             >
-                                <code dangerouslySetInnerHTML={{ __html: highlight(snippet, 'js') }} />
+                                <code dangerouslySetInnerHTML={{ __html: highlightBasic(snippet, 'js') }} />
                             </pre>
                         </div>
                     </div>

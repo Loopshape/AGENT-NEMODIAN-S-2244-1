@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { AiState, Agent, Consensus, GroundingChunk, CodeReviewFinding } from '../types';
+import { highlightBasic, escapeHtml } from '../utils/highlighter'; // Import shared highlighter utilities
 
 /**
  * Determines the inline CSS styles for an AgentCard based on its status.
- * This provides immediate visual feedback on an agent's state (e.g., pulsing when working, shaking on error).
+ * This provides immediate visual feedback on an neuron's state (e.g., pulsing when working, shaking on error).
  * @param {Agent} agent - The agent object containing status and color information.
  * @returns {React.CSSProperties} A style object to be applied to the agent card's container.
  */
@@ -92,7 +93,16 @@ const AgentCard: React.FC<{ agent: Agent }> = ({ agent }) => (
                     />
                 </svg>
             )}
-            {agent.content}
+            {/* Detailed Status Message */}
+            {typeof agent.content === 'string' ? (
+                <span className="flex-1 truncate" title={agent.content}>
+                    {agent.content}
+                </span>
+            ) : (
+                <span className="flex-1">
+                    {agent.content}
+                </span>
+            )}
         </div>
     </div>
 );
@@ -139,40 +149,109 @@ const ConsensusPanel: React.FC<{ consensus: Consensus }> = ({ consensus }) => (
  * @param {{ chunks: GroundingChunk[] }} props - Component props containing the array of grounding chunks.
  * @returns {React.ReactElement} The rendered grounding sources panel.
  */
-const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => (
-    <div className="grounding-panel bg-yellow-900/20 border border-[#FFD54F] rounded-lg p-3.5 mt-4">
-        <div className="flex items-center gap-2 font-bold text-[#FFD54F] mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M10 3.5a1.5 1.5 0 01.5 2.915V9.5a1.5 1.5 0 01-3 0V6.415A1.5 1.5 0 0110 3.5z" />
-                <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM2 10a8 8 0 1116 0 8 8 0 01-16 0z" />
-            </svg>
-            <span>Grounded on Real-Time Google Search</span>
-        </div>
-        <ol className="list-decimal list-inside text-xs space-y-2 pl-1">
-            {chunks.map(
-                (chunk, i) =>
-                    chunk.web && (
-                        <li key={i} className="truncate">
-                            <a
-                                href={chunk.web.uri}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={chunk.web.title || chunk.web.uri}
-                                className="text-sky-400 hover:underline hover:text-sky-300 transition-colors"
-                            >
-                                {chunk.web.title || chunk.web.uri}
-                            </a>
-                            {chunk.web.snippet && ( // Display snippet if available
-                                <p className="text-slate-500 mt-0.5 ml-4 text-[0.65rem] line-clamp-2">
-                                    {chunk.web.snippet}
-                                </p>
-                            )}
-                        </li>
-                    )
+const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
+    const webChunks = chunks.filter(chunk => chunk.web);
+    const mapsChunks = chunks.filter(chunk => chunk.maps);
+
+    if (webChunks.length === 0 && mapsChunks.length === 0) {
+        return null; // Don't render if no grounding data
+    }
+
+    return (
+        <div className="grounding-panel bg-yellow-900/20 border border-[#FFD54F] rounded-lg p-3.5 mt-4">
+            <div className="flex items-center gap-2 font-bold text-[#FFD54F] mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 3.5a1.5 1.5 0 01.5 2.915V9.5a1.5 1.5 0 01-3 0V6.415A1.5 1.5 0 0110 3.5z" />
+                    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM2 10a8 8 0 1116 0 8 8 0 01-16 0z" />
+                </svg>
+                <span>Grounded Information</span>
+            </div>
+
+            {webChunks.length > 0 && (
+                <div className="mb-4">
+                    <h4 className="text-sm font-bold text-[#FFD54F] mb-2">Google Search Results:</h4>
+                    <ol className="list-decimal list-inside text-xs space-y-2 pl-1">
+                        {webChunks.map((chunk, i) =>
+                            chunk.web && (
+                                <li key={`web-${i}`} className="truncate">
+                                    <a
+                                        href={chunk.web.uri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={chunk.web.title || chunk.web.uri}
+                                        className="text-sky-400 hover:underline hover:text-sky-300 transition-colors"
+                                    >
+                                        {chunk.web.title || chunk.web.uri}
+                                    </a>
+                                    {chunk.web.snippet && (
+                                        <p className="text-slate-500 mt-0.5 ml-4 text-[0.65rem] line-clamp-2">
+                                            {chunk.web.snippet}
+                                        </p>
+                                    )}
+                                </li>
+                            )
+                        )}
+                    </ol>
+                </div>
             )}
-        </ol>
-    </div>
-);
+
+            {mapsChunks.length > 0 && (
+                <div>
+                    <h4 className="text-sm font-bold text-[#FFD54F] mb-2">Google Maps Results:</h4>
+                    <ol className="list-decimal list-inside text-xs space-y-2 pl-1">
+                        {mapsChunks.map((chunk, i) =>
+                            chunk.maps && (
+                                <li key={`maps-${i}`} className="truncate">
+                                    <a
+                                        href={chunk.maps.uri}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title={chunk.maps.title || chunk.maps.uri}
+                                        className="text-sky-400 hover:underline hover:text-sky-300 transition-colors"
+                                    >
+                                        {chunk.maps.title || chunk.maps.uri}
+                                    </a>
+                                    {chunk.maps.placeAnswerSources && chunk.maps.placeAnswerSources.length > 0 && (
+                                        <div className="ml-4 mt-1 space-y-1">
+                                            {chunk.maps.placeAnswerSources.map((source, j) => (
+                                                <div key={`maps-source-${i}-${j}`}>
+                                                    {source.displayText && (
+                                                        <p className="text-slate-400 text-[0.7rem] font-semibold">
+                                                            {source.displayText}
+                                                        </p>
+                                                    )}
+                                                    {source.reviewSnippets && source.reviewSnippets.length > 0 && (
+                                                        <ul className="list-disc list-inside ml-2 text-slate-500 text-[0.6rem]">
+                                                            {source.reviewSnippets.map((review, k) => (
+                                                                review.uri && (
+                                                                    <li key={`review-${i}-${j}-${k}`} className="line-clamp-2">
+                                                                        <a
+                                                                            href={review.uri}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            title={review.displayText}
+                                                                            className="text-slate-400 hover:underline"
+                                                                        >
+                                                                            {review.displayText || 'Review link'}
+                                                                        </a>
+                                                                    </li>
+                                                                )
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </li>
+                            )
+                        )}
+                    </ol>
+                </div>
+            )}
+        </div>
+    );
+};
 
 /**
  * Generates a diff between two strings using a simplified LCS (Longest Common Subsequence) algorithm.
@@ -219,50 +298,47 @@ const generateDiff = (oldStr: string, newStr: string) => {
 };
 
 /**
- * A component to display a visual diff between two blocks of text.
- * @param {object} props The component props.
- * @param {string} props.before The original text.
- * @param {string} props.after The new text.
- * @returns {React.ReactElement} The rendered diff view.
- */
-const DiffViewer: React.FC<{ before: string; after: string }> = ({ before, after }) => {
-    const diff = useMemo(() => generateDiff(before, after), [before, after]);
-
-    return (
-        <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
-            <code>
-                {diff.map((line, index) => {
-                    const lineClasses = {
-                        added: 'bg-green-500/20',
-                        removed: 'bg-red-500/20',
-                        common: '',
-                    };
-                    const prefixes = { added: '+', removed: '-', common: ' ' };
-                    return (
-                        <div key={index} className={lineClasses[line.type]}>
-                            <span className="select-none inline-block w-4 text-center">{prefixes[line.type]}</span>
-                            <span>{line.text}</span>
-                        </div>
-                    );
-                })}
-            </code>
-        </pre>
-    );
-};
-
-/**
  * Highlights occurrences of a query within a text string by wrapping them in <mark> tags.
  * @param {string} text - The source text (e.g., a block of code).
  * @param {string} query - The search term to highlight.
  * @returns {string} An HTML string with matches highlighted.
  */
 const highlightMatches = (text: string, query: string): string => {
-    if (!query) return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const escapedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (!query) return escapeHtml(text); // Use escapeHtml from highlighter.ts
+    const escapedText = escapeHtml(text);
     const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const regex = new RegExp(`(${escapedQuery})`, 'gi');
     return escapedText.replace(regex, `<mark class="bg-yellow-500/50 rounded px-0.5">$1</mark>`);
 };
+
+/**
+ * A simple component to display a line-by-line diff.
+ * @param {{ before: string; after: string; query?: string }} props - Component props.
+ * @param {string} props.before - The original string content.
+ * @param {string} props.after - The new string content.
+ * @param {string} [props.query] - Optional search query to highlight within diff lines.
+ * @returns {React.ReactElement} The rendered diff viewer.
+ */
+const DiffViewer: React.FC<{ before: string; after: string; query?: string }> = ({ before, after, query = '' }) => {
+    const diff = useMemo(() => generateDiff(before, after), [before, after]);
+
+    return (
+        <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
+            {diff.map((line, index) => (
+                <div key={index} className={`flex items-center ${line.type === 'added' ? 'bg-green-900/40' : line.type === 'removed' ? 'bg-red-900/40' : ''}`}>
+                    <span className={`w-4 text-center text-[0.6rem] flex-shrink-0 ${line.type === 'added' ? 'text-green-300' : line.type === 'removed' ? 'text-red-300' : 'text-gray-500'}`}>
+                        {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                    </span>
+                    <code
+                        className="flex-grow min-w-0"
+                        dangerouslySetInnerHTML={{ __html: highlightMatches(line.text, query) }}
+                    />
+                </div>
+            ))}
+        </pre>
+    );
+};
+
 
 /**
  * A panel that displays the results of an AI code review.
@@ -372,21 +448,35 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
     originalCode,
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState<'code' | 'diff'>('code');
 
     useEffect(() => {
         if (isOpen) {
             setViewMode('code');
+            setSearchQuery(''); // Clear search on open
+            setDebouncedSearchQuery(''); // Clear debounced search on open
         }
     }, [isOpen]);
+
+    // Debounce effect for search query
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 300); // 300ms debounce delay
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [searchQuery]);
 
     if (!isOpen) return null;
 
     const codeToActOn = aiState.consensus?.selectedCandidate ?? aiState.generatedCode;
-    const lowerCaseQuery = searchQuery.toLowerCase();
+    const lowerCaseQuery = debouncedSearchQuery.toLowerCase(); // Use debounced query for filtering
 
     const filteredAgents = aiState.agents.filter((agent) => {
-        if (!searchQuery) return true;
+        if (!lowerCaseQuery) return true;
         const contentString = typeof agent.content === 'string' ? agent.content : '';
         return (
             agent.title.toLowerCase().includes(lowerCaseQuery) ||
@@ -399,7 +489,7 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
         ? {
               ...aiState.consensus,
               allCandidates: aiState.consensus.allCandidates.filter((c) => {
-                  if (!searchQuery) return true;
+                  if (!lowerCaseQuery) return true;
                   return (
                       c.content.toLowerCase().includes(lowerCaseQuery) ||
                       c.agents.join(', ').toLowerCase().includes(lowerCaseQuery)
@@ -409,13 +499,32 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
         : null;
 
     const filteredGroundingChunks = aiState.groundingChunks?.filter((chunk) => {
-        if (!searchQuery) return true;
-        if (!chunk.web) return false;
-        return (
-            (chunk.web.title || '').toLowerCase().includes(lowerCaseQuery) ||
-            chunk.web.uri.toLowerCase().includes(lowerCaseQuery) ||
-            (chunk.web.snippet || '').toLowerCase().includes(lowerCaseQuery) // Include snippet in search
-        );
+        if (!lowerCaseQuery) return true;
+        
+        // Check web chunks
+        if (chunk.web) {
+            if ((chunk.web.title || '').toLowerCase().includes(lowerCaseQuery) ||
+                chunk.web.uri.toLowerCase().includes(lowerCaseQuery) ||
+                (chunk.web.snippet || '').toLowerCase().includes(lowerCaseQuery)) {
+                return true;
+            }
+        }
+
+        // Check maps chunks
+        if (chunk.maps) {
+            if ((chunk.maps.title || '').toLowerCase().includes(lowerCaseQuery) ||
+                (chunk.maps.uri || '').toLowerCase().includes(lowerCaseQuery) ||
+                (chunk.maps.placeAnswerSources || []).some(source => 
+                    (source.displayText || '').toLowerCase().includes(lowerCaseQuery) ||
+                    (source.reviewSnippets || []).some(review => 
+                        (review.displayText || '').toLowerCase().includes(lowerCaseQuery) ||
+                        (review.uri || '').toLowerCase().includes(lowerCaseQuery)
+                    )
+                )) {
+                return true;
+            }
+        }
+        return false;
     });
 
     return (
@@ -436,8 +545,8 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                 <input
                     type="search"
                     placeholder="Filter agents, code, or results..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={searchQuery} // Input value controlled by immediate searchQuery
+                    onChange={(e) => setSearchQuery(e.target.value)} // Update searchQuery immediately
                     className="w-full bg-transparent text-sm text-[#f0f0e0] placeholder-gray-500 focus:ring-0 outline-none border-none p-0"
                     aria-label="Filter AI responses"
                 />
@@ -491,12 +600,12 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                                 <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
                                     <code
                                         dangerouslySetInnerHTML={{
-                                            __html: highlightMatches(codeToActOn, searchQuery || ''),
+                                            __html: highlightMatches(codeToActOn, lowerCaseQuery || ''),
                                         }}
                                     />
                                 </pre>
                             ) : (
-                                <DiffViewer before={originalCode} after={codeToActOn} />
+                                <DiffViewer before={originalCode} after={codeToActOn} query={lowerCaseQuery} />
                             )}
                         </div>
                         <div className="p-2.5 border-t border-gray-700 flex gap-2">
@@ -519,8 +628,9 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                 {filteredConsensus && filteredConsensus.allCandidates.length > 0 && (
                     <ConsensusPanel consensus={filteredConsensus} />
                 )}
-                {filteredGroundingChunks && filteredGroundingChunks.length > 0 && (
-                    <GroundingPanel chunks={filteredGroundingChunks} />
+                {/* Always show GroundingPanel if there are any chunks, even if filtered to none */}
+                {(aiState.groundingChunks?.length ?? 0) > 0 && (
+                    <GroundingPanel chunks={filteredGroundingChunks || []} />
                 )}
             </div>
         </div>
