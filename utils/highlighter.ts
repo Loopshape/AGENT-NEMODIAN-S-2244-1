@@ -106,7 +106,7 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*)/ },
         { type: 'variable', regex: /^\$[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*/ },
         { type: 'string', regex: /^"(?:\\.|[^"\\])*"|^'(?:\\.|[^'\\])*'/ },
-        { type: 'number', regex: /^\b\d+(\.\d+)?(?:e[+-]?\d+)?\b/i },
+        { type: 'number', regex: /^\b\d+(\.\d+)?(?:e[+-]?\d+)?\b/ },
         {
             type: 'keyword',
             regex: /^\b(?:echo|if|else|elseif|while|for|foreach|function|return|const|class|new|public|protected|private|static|__halt_compiler|abstract|and|array|as|break|callable|case|catch|clone|continue|declare|default|die|do|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|eval|exit|extends|final|finally|global|goto|implements|include|include_once|instanceof|insteadof|interface|isset|list|namespace|or|print|require|require_once|switch|throw|trait|try|unset|use|var|xor|yield|__CLASS__|__DIR__|__FILE__|__FUNCTION__|__LINE__|__METHOD__|__NAMESPACE__|__TRAIT__)\b/i,
@@ -248,12 +248,20 @@ export const escapeHtml = (str: string) => {
  * This version is generic and does not include selection highlighting.
  * @param {string} text - The input text to highlight.
  * @param {string} language - The language identifier.
+ * @param {{start: number, end: number}[]} searchMatches - Array of ranges for all search matches.
+ * @param {number} activeMatchIndex - Index of the currently active search match.
  * @returns {string} The HTML string with syntax highlighting spans.
  */
-export const highlightBasic = (text: string, language: string): string => {
+export const highlightBasic = (
+    text: string,
+    language: string,
+    searchMatches: { start: number; end: number }[] = [],
+    activeMatchIndex: number = -1
+): string => {
     if (!text) return '';
     const tokens = tokenize(text, language);
 
+    let currentOffset = 0;
     return tokens
         .map((token) => {
             const isError = !!token.errorMessage;
@@ -261,9 +269,44 @@ export const highlightBasic = (text: string, language: string): string => {
             const titleAttr = isError ? `title="${safeTitle}"` : '';
             const className = isError ? typeToClassMap['error'] : typeToClassMap[token.type] || typeToClassMap['unknown'];
 
-            const escapedValue = escapeHtml(token.value);
+            let styledContent = escapeHtml(token.value);
 
-            return `<span class="${className}" ${titleAttr}>${escapedValue}</span>`;
+            const tokenStart = currentOffset;
+            const tokenEnd = currentOffset + token.value.length;
+
+            // Apply search highlighting
+            let tempStyledContent = '';
+            let lastSearchHighlightIndex = 0;
+
+            searchMatches.forEach((match, index) => {
+                const matchStart = match.start;
+                const matchEnd = match.end;
+
+                const overlapStart = Math.max(tokenStart, matchStart);
+                const overlapEnd = Math.min(tokenEnd, matchEnd);
+
+                if (overlapStart < overlapEnd) {
+                    // Part of the token is a search match
+                    const beforeMatch = styledContent.substring(lastSearchHighlightIndex, overlapStart - tokenStart);
+                    const inMatch = styledContent.substring(overlapStart - tokenStart, overlapEnd - tokenStart);
+                    // No afterMatch needed here, as we update styledContent fully.
+
+                    const matchClass = index === activeMatchIndex ? 'editor-active-match' : 'editor-search-match';
+
+                    tempStyledContent += beforeMatch + `<span class="${matchClass}">${inMatch}</span>`;
+                    lastSearchHighlightIndex = overlapEnd - tokenStart;
+                }
+            });
+
+            // If any search highlights were applied, append any remaining original content
+            if (tempStyledContent !== '') {
+                styledContent = tempStyledContent + styledContent.substring(lastSearchHighlightIndex);
+            }
+
+
+            currentOffset += token.value.length; // Update offset for the next token
+
+            return `<span class="${className}" ${titleAttr}>${styledContent}</span>`;
         })
         .join('');
 };

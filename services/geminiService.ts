@@ -284,7 +284,7 @@ Return only a JSON array of objects, for example:
                             },
                             documentation: {
                                 type: Type.STRING,
-                                description: 'Detailed documentation, including multi-line function signatures and parameter hints, possibly spanning several lines.',
+                                description: 'Detailed documentation for the suggestion, including multi-line function signatures, parameter hints, and a brief description, possibly spanning several lines.',
                             },
                         },
                         required: ['suggestion'], // Documentation is optional, but preferred
@@ -292,7 +292,7 @@ Return only a JSON array of objects, for example:
                 },
                 // Small thinking budget for faster response, max output tokens for brevity
                 thinkingConfig: { thinkingBudget: 50 },
-                maxOutputTokens: 750, // Increased to allow for more detailed documentation
+                maxOutputTokens: 1000, // Increased to allow for more detailed documentation (from 750 to 1000)
             },
         });
 

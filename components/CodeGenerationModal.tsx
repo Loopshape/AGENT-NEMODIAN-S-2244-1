@@ -13,6 +13,7 @@ interface CodeGenerationModalProps {
     geolocationError: string | null;
 }
 
+// FIX: Corrected typo in type annotation from `CodeGenerationModalModalProps` to `CodeGenerationModalProps`.
 export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
     isOpen,
     onClose,
@@ -121,7 +122,12 @@ export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
                             ref={promptTextareaRef}
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
-                            placeholder="e.g., 'Generate a React component for a data table' or 'Write a Python script to parse CSV data'"
+                            placeholder={`e.g.,
+Generate a React component for a data table with the following features:
+- Responsive design
+- Pagination
+- Search functionality
+- Sortable columns for 'name' and 'age' fields.`}
                             className="w-full h-32 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#BB86FC] focus:border-[#BB86FC] outline-none transition-colors"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />

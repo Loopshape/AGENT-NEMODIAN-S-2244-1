@@ -17,6 +17,7 @@ export interface Agent {
 export interface MapsPlaceAnswerSource {
     uri?: string;
     title?: string;
+    // FIX: Explicitly define reviewSnippets as an array of objects.
     reviewSnippets?: {
         displayText?: string;
         uri?: string;

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode, GroundingChunk } from '../types';
@@ -12,6 +13,7 @@ interface HeaderProps {
     onLoadScript: () => void; // Renamed from onShowHtmlSingleFile
     onFixCode: () => void;
     onGenerateCode: () => void; // New prop for AI Generate Code
+    onFindReplaceToggle: () => void; // New prop for Find/Replace
 }
 
 /**
@@ -26,6 +28,7 @@ interface HeaderProps {
  * @param {() => void} props.onLoadScript - Triggers a file selection dialog to load a script.
  * @param {() => void} props.onFixCode - Initiates an AI-driven quick code fix.
  * @param {() => void} props.onGenerateCode - Opens the modal for AI code generation.
+ * @param {() => void} props.onFindReplaceToggle - Toggles the Find/Replace widget.
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
@@ -80,6 +83,12 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 className="bg-[#4ac94a] border-[#4ac94a] hover:bg-green-400 text-xs px-2 py-1.5 rounded transition-colors"
             >
                 Orchestrator
+            </button>
+            <button
+                onClick={props.onFindReplaceToggle} // New button for Find/Replace
+                className="bg-[#03DAC6] hover:bg-[#03a99e] text-xs px-2 py-1.5 rounded transition-colors"
+            >
+                Find/Replace
             </button>
         </div>
     </header>
@@ -375,6 +384,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
         onDelete,
     } = props;
 
+    // Determine if undo/redo buttons should be disabled
+    const canUndo = historyIndex > 0;
+    const canRedo = historyIndex < history.length - 1;
+
     return (
         <aside
             className={`bg-[#313328] border-r border-[#22241e] flex flex-col w-60 transition-all duration-300 overflow-y-auto ${
@@ -395,10 +408,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
 
             <Accordion title="Quantum Actions">
                 <div className="flex flex-col gap-1 pt-1">
-                    <button onClick={onUndo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
+                    <button
+                        onClick={onUndo}
+                        disabled={!canUndo}
+                        className={`bg-[#a03333] text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
+                            canUndo ? 'hover:bg-[#3366a0]' : 'opacity-50 cursor-not-allowed'
+                        }`}
+                    >
                         UNDO
                     </button>
-                    <button onClick={onRedo} className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded">
+                    <button
+                        onClick={onRedo}
+                        disabled={!canRedo}
+                        className={`bg-[#a03333] text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
+                            canRedo ? 'hover:bg-[#3366a0]' : 'opacity-50 cursor-not-allowed'
+                        }`}
+                    >
                         REDO
                     </button>
                     <button

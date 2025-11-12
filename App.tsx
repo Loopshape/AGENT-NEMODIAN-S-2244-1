@@ -179,6 +179,7 @@ const App: React.FC = () => {
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [isCodeGenerationModalOpen, setIsCodeGenerationModalOpen] = useState(false); // New state for code generation modal
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+    const [isFindReplaceVisible, setIsFindReplaceVisible] = useState(false); // New state for Find/Replace widget
 
     const [initialModalState, setInitialModalState] = useState<{
         prompt: string;
@@ -188,7 +189,7 @@ const App: React.FC = () => {
 
     // FIX: Rename the state setter for historyIndex to avoid redeclaration.
     const [history, setHistoryContent] = useState<string[]>([editorContent]);
-    const [historyIndex, setHistoryIndex] = useState(0);
+    const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0); // Renamed to avoid collision with prop
 
     const [stats, setStats] = useState<EditorStats>({ cursor: '1:0', lines: 0, chars: 0, history: 1 });
     const [aiState, setAiState] = useState<AiState>({
@@ -254,7 +255,7 @@ const App: React.FC = () => {
     };
 
     const runAgentFlow = async <T,>(task: () => Promise<T>): Promise<T> => {
-        updateAgent('nexus', { status: 'working', content: 'Orchestrating quantum fractal reasoning...' });
+        updateAgent('nexus', { status: 'working', content: 'Orchestrating quantum fractal reasoning.' });
         await new Promise((r) => setTimeout(r, 400));
         updateAgent('nexus', { status: 'done' });
         updateAgent('cognito', { status: 'working', content: 'Executing hyperthreaded fractal analysis...' });
@@ -479,14 +480,14 @@ const App: React.FC = () => {
             }
 
             // Update editor state and history
-            if (newContent === history[historyIndex]) return;
-            const newHistory = [...history.slice(0, historyIndex + 1), newContent];
+            if (newContent === editorContent) return; // Only update if content actually changed
+            const newHistory = [...history.slice(0, currentHistoryIndex + 1), newContent];
             setHistoryContent(newHistory);
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(newHistory.length - 1);
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(newHistory.length - 1);
             setEditorContent(newContent);
         },
-        [activeFilePath, history, historyIndex, setHistoryContent, setHistoryIndex]
+        [activeFilePath, history, currentHistoryIndex, editorContent] // Added editorContent to dependencies
     );
 
     const handleCommandSubmit = async (command: string) => {
@@ -599,31 +600,31 @@ const App: React.FC = () => {
         }
     };
 
-    const handleUndo = () => {
-        if (historyIndex > 0) {
-            const newIndex = historyIndex - 1;
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(newIndex);
-            handleSetContent(history[newIndex]);
+    const handleUndo = useCallback(() => {
+        if (currentHistoryIndex > 0) {
+            const newIndex = currentHistoryIndex - 1;
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(newIndex);
+            setEditorContent(history[newIndex]); // Directly set content, handleSetContent will add to history if different
         }
-    };
+    }, [currentHistoryIndex, history]);
 
-    const handleRedo = () => {
-        if (historyIndex < history.length - 1) {
-            const newIndex = historyIndex + 1;
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(newIndex);
-            handleSetContent(history[newIndex]);
+    const handleRedo = useCallback(() => {
+        if (currentHistoryIndex < history.length - 1) {
+            const newIndex = currentHistoryIndex + 1;
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(newIndex);
+            setEditorContent(history[newIndex]); // Directly set content, handleSetContent will add to history if different
         }
-    };
+    }, [currentHistoryIndex, history]);
 
-    const handleRevertToState = (index: number) => {
+    const handleRevertToState = useCallback((index: number) => {
         if (index >= 0 && index < history.length) {
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(index);
-            handleSetContent(history[index]);
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(index);
+            setEditorContent(history[index]); // Directly set content, handleSetContent will add to history if different
         }
-    };
+    }, [history]);
 
     const handleStatsChange = useCallback(
         (newStats: { cursor: string; lines: number; chars: number }) => {
@@ -782,10 +783,10 @@ const App: React.FC = () => {
             setFileName(path.split('/').pop() || 'untitled');
             setFileType(getLanguageFromPath(path));
             setHistoryContent([node.content]);
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(0);
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(0);
         }
-    }, [fileSystem, setHistoryContent, setHistoryIndex]);
+    }, [fileSystem]); // Removed setHistoryContent, setCurrentHistoryIndex from dependencies as they are setters
 
     const handleCreateFile = useCallback((path: string) => {
         const fileName = prompt('Enter new file name:');
@@ -793,7 +794,7 @@ const App: React.FC = () => {
         const newPath = `${path}/${fileName}`;
         setFileSystem(fs => set(fs, newPath, { type: 'file', content: '' }));
     }, []);
-    
+
     const handleCreateFolder = useCallback((path: string) => {
         const folderName = prompt('Enter new folder name:');
         if (!folderName) return;
@@ -884,8 +885,8 @@ const App: React.FC = () => {
             setFileName(newFileName);
             setFileType(newFileType);
             setHistoryContent([content]);
-            // FIX: Use setHistoryIndex to update the history index.
-            setHistoryIndex(0);
+            // FIX: Use setCurrentHistoryIndex to update the history index.
+            setCurrentHistoryIndex(0);
 
             // Reset file input to allow selecting the same file again
             if (fileInputRef.current) {
@@ -897,7 +898,8 @@ const App: React.FC = () => {
             alert(`Could not read file: ${reader.error?.message}`);
         };
         reader.readAsText(file, 'UTF-8'); // Explicitly read as UTF-8
-    }, [setHistoryContent, setHistoryIndex]);
+    }, []); // Removed setHistoryContent, setCurrentHistoryIndex from dependencies as they are setters
+
 
     return (
         <div
@@ -922,6 +924,7 @@ const App: React.FC = () => {
                 onLoadScript={handleLoadScript} // Use new handler
                 onFixCode={handleFixCode}
                 onGenerateCode={openCodeGenerationModal} // Pass new handler to Header
+                onFindReplaceToggle={() => setIsFindReplaceVisible((p) => !p)} // Pass toggle function
             />
             <StatusBar fileName={fileName} stats={stats} />
             <main className="grid-in-main flex overflow-hidden">
@@ -935,7 +938,7 @@ const App: React.FC = () => {
                     onAnalyzeSelection={handleAnalyzeSelection}
                     onRunOrchestrator={() => openPromptModal('orchestrator')}
                     history={history}
-                    historyIndex={historyIndex}
+                    historyIndex={currentHistoryIndex} // Use currentHistoryIndex
                     onRevertToState={handleRevertToState}
                     editorFontSize={editorFontSize}
                     onFontSizeChange={setEditorFontSize}
@@ -960,6 +963,8 @@ const App: React.FC = () => {
                         onStatsChange={handleStatsChange}
                         fontSize={editorFontSize}
                         onSelectionChange={(start, end) => { setSelectionStart(start); setSelectionEnd(end); }}
+                        isFindReplaceOpen={isFindReplaceVisible} // Pass visibility state
+                        onFindReplaceToggle={() => setIsFindReplaceVisible((p) => !p)} // Pass toggle function
                     />
                 </div>
             </main>
