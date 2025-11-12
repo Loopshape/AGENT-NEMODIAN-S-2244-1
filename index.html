@@ -1425,7 +1425,7 @@ function welcome() {
             const patterns = this.languagePatterns[lang] || this.languagePatterns.javascript;
             let highlighted = this.escapeHtml(text);
             patterns.forEach(({ pattern, type }) => {
-                highlighted = '<span class="sh-token sh-${type}"> + highlighted.replace(pattern, match => `${match}` + </span>');
+                highlighted = '<span class="sh-token sh-${type}"> + highlighted.replace(pattern, match => `${match}`) + </span>';
             });
             return highlighted;
         }
