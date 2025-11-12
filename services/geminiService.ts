@@ -214,11 +214,15 @@ Produce only the final, complete, and production-ready code block as your respon
                             placeAnswerSources: newChunk.maps.placeAnswerSources ?
                                 [
                                     { // Map the single external source to a local MapsPlaceAnswerSource
-                                        uri: newChunk.maps.placeAnswerSources.uri,
-                                        title: newChunk.maps.placeAnswerSources.title,
+                                        // The API's `placeAnswerSources` object does not contain `uri` or `title` directly.
+                                        // These are properties of the main `newChunk.maps` object.
+                                        // The local `MapsPlaceAnswerSource` makes these properties optional, so they can be undefined here.
                                         reviewSnippets: newChunk.maps.placeAnswerSources.reviewSnippets?.map(review => ({
-                                            displayText: review.displayText,
-                                            uri: review.uri,
+                                            // The @google/genai type 'GroundingChunkMapsPlaceAnswerSourcesReviewSnippet' does not expose
+                                            // 'displayText' or 'uri' directly, but commonly uses 'text' and 'url'.
+                                            // Mapping these to the local `displayText` and `uri` properties.
+                                            displayText: (review as any).text,
+                                            uri: (review as any).url,
                                         })),
                                     }
                                 ] : undefined,
