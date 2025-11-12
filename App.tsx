@@ -19,6 +19,7 @@ import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './
 import { Editor } from './components/Editor';
 import { AiResponsePanel } from './components/AiPanels';
 import { PromptModal } from './components/PromptModal';
+import { CodeGenerationModal } from './components/CodeGenerationModal'; // Import new modal
 import { generateWithThinkingStream, runMultiAgentConsensus, personas, runCodeReview, quickFixCode } from './services/geminiService';
 import { get, set, unset } from './utils/fsHelpers';
 
@@ -173,6 +174,7 @@ const App: React.FC = () => {
     const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
+    const [isCodeGenerationModalOpen, setIsCodeGenerationModalOpen] = useState(false); // New state for code generation modal
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
 
     const [initialModalState, setInitialModalState] = useState<{
@@ -376,6 +378,81 @@ const App: React.FC = () => {
         [editorContent, aiState.isLoading, userLocation]
     );
 
+    // New handler for AI Code Generation modal submission
+    const handleCodeGenerationSubmit = useCallback(
+        async ({ prompt, useSearch, useMaps }: { prompt: string; useSearch: boolean; useMaps: boolean }) => {
+            setIsCodeGenerationModalOpen(false);
+            if (aiState.isLoading) return;
+
+            setOriginalCodeForDiff(''); // No original code for diff in generation mode
+            const currentPrompt = prompt;
+            const fullContext = ''; // No current editor context for generation
+
+            setIsAiPanelOpen(true);
+            setAiState({
+                agents: initialAgentState,
+                isLoading: true,
+                consensus: null,
+                generatedCode: null,
+                groundingChunks: null,
+                codeReviewFindings: null,
+            });
+
+            let currentLatitude: number | null = null;
+            let currentLongitude: number | null = null;
+            if (useMaps && userLocation) {
+                currentLatitude = userLocation.latitude;
+                currentLongitude = userLocation.longitude;
+                updateAgent('nexus', { status: 'working', content: 'Fetching geolocation data...' });
+                await new Promise((r) => setTimeout(r, 200));
+            }
+
+            try {
+                if (useSearch || useMaps) {
+                    updateAgent('nexus', { status: 'working', content: 'Initiating grounded quantum query for generation...' });
+                    await new Promise((r) => setTimeout(r, 200));
+                    updateAgent('relay', { status: 'working', content: 'Connecting to real-time data streams...' });
+                }
+
+                await runAgentFlow(() =>
+                    generateWithThinkingStream(
+                        currentPrompt,
+                        fullContext,
+                        useSearch,
+                        useMaps,
+                        currentLatitude,
+                        currentLongitude,
+                        (update) => {
+                            setAiState((prev) => ({
+                                ...prev,
+                                generatedCode: update.code,
+                                groundingChunks: update.groundingChunks || null,
+                            }));
+                        }
+                    )
+                );
+
+                if (useSearch || useMaps) {
+                    await new Promise((r) => setTimeout(r, 200));
+                    updateAgent('relay', { status: 'done' });
+                    updateAgent('cognito', { status: 'working', content: 'Analyzing grounded information...' });
+                    await new Promise((r) => setTimeout(r, 200));
+                    updateAgent('cognito', { status: 'done', content: 'Analysis complete.' });
+                }
+                updateAgent('echo', {
+                    status: 'done',
+                    content: (useSearch || useMaps) ? 'Grounded Code Generated.' : 'Code Generated.',
+                });
+            } catch (error) {
+                console.error('Gemini API Error:', error);
+                updateAgent('echo', { status: 'error', content: `Quantum Error: ${(error as Error).message}` });
+            } finally {
+                setAiState((prev) => ({ ...prev, isLoading: false }));
+            }
+        },
+        [aiState.isLoading, userLocation]
+    );
+
     const handleSetContent = useCallback(
         (newContent: string) => {
             // Update file system state
@@ -543,6 +620,10 @@ const App: React.FC = () => {
     const openPromptModal = (mode: AiMode, prompt = '', snippet = '') => {
         setInitialModalState({ mode, prompt, snippet });
         setIsPromptModalOpen(true);
+    };
+
+    const openCodeGenerationModal = () => {
+        setIsCodeGenerationModalOpen(true);
     };
 
     const handleQuickAction = async (action: 'optimize' | 'document' | 'refactor') => {
@@ -787,7 +868,8 @@ const App: React.FC = () => {
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
                 onShowHtmlSingleFile={showHtmlSingleFile}
-                onFixCode={handleFixCode} // Pass new handler to Header
+                onFixCode={handleFixCode}
+                onGenerateCode={openCodeGenerationModal} // Pass new handler to Header
             />
             <StatusBar fileName={fileName} stats={stats} />
             <main className="grid-in-main flex overflow-hidden">
@@ -808,7 +890,8 @@ const App: React.FC = () => {
                     onSaveDraft={handleSaveDraft}
                     onLoadDraft={handleLoadDraft}
                     onCodeReview={handleCodeReview}
-                    onFixCode={handleFixCode} // Pass new handler to LeftPanel
+                    onFixCode={handleFixCode}
+                    onGenerateCode={openCodeGenerationModal} // Pass new handler to LeftPanel
                     fileSystem={fileSystem}
                     activePath={activeFilePath}
                     onOpenFile={handleOpenFile}
@@ -847,6 +930,13 @@ const App: React.FC = () => {
                 onSubmit={handleModalSubmit}
                 personas={personas as Persona[]}
                 initialState={initialModalState}
+                userLocation={userLocation}
+                geolocationError={geolocationError}
+            />
+            <CodeGenerationModal // New CodeGenerationModal
+                isOpen={isCodeGenerationModalOpen}
+                onClose={() => setIsCodeGenerationModalOpen(false)}
+                onSubmit={handleCodeGenerationSubmit}
                 userLocation={userLocation}
                 geolocationError={geolocationError}
             />

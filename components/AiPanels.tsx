@@ -215,11 +215,9 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
                                         <div className="ml-4 mt-1 space-y-1">
                                             {chunk.maps.placeAnswerSources.map((source, j) => (
                                                 <div key={`maps-source-${i}-${j}`}>
-                                                    {source.displayText && (
-                                                        <p className="text-slate-400 text-[0.7rem] font-semibold">
-                                                            {source.displayText}
-                                                        </p>
-                                                    )}
+                                                  {/* FIX: Removed direct access to `source.displayText` as it is not defined on MapsPlaceAnswerSource. */}
+                                                  {/* The `displayText` property only exists within `reviewSnippets`. */}
+                                                  {/* If there's other information to display for the source itself, use `source.title` or `source.uri`. */}
                                                     {source.reviewSnippets && source.reviewSnippets.length > 0 && (
                                                         <ul className="list-disc list-inside ml-2 text-slate-500 text-[0.6rem]">
                                                             {source.reviewSnippets.map((review, k) => (
@@ -515,7 +513,8 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
             if ((chunk.maps.title || '').toLowerCase().includes(lowerCaseQuery) ||
                 (chunk.maps.uri || '').toLowerCase().includes(lowerCaseQuery) ||
                 (chunk.maps.placeAnswerSources || []).some(source => 
-                    (source.displayText || '').toLowerCase().includes(lowerCaseQuery) ||
+                    // FIX: `displayText` is a property of `reviewSnippets` items, not directly on `MapsPlaceAnswerSource`.
+                    // Updated to iterate through `reviewSnippets` to check `displayText` and `uri`.
                     (source.reviewSnippets || []).some(review => 
                         (review.displayText || '').toLowerCase().includes(lowerCaseQuery) ||
                         (review.uri || '').toLowerCase().includes(lowerCaseQuery)
@@ -538,7 +537,7 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                 >
                     <path
                         fillRule="evenodd"
-                        d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+                        d="M8 4a4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
                         clipRule="evenodd"
                     />
                 </svg>

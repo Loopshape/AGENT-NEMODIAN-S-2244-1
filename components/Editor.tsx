@@ -470,8 +470,8 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         <div className="flex-1 flex relative bg-[#22241e] overflow-hidden">
             <div
                 ref={linesRef}
-                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-hidden"
-                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}
+                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-y-hidden overflow-x-hidden" // Changed overflow to hidden for vertical axis
+                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
             >
                 {renderedLineNumbers}
             </div>
@@ -484,14 +484,14 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                     onScroll={handleScroll}
                     onKeyDown={handleKeyDown}
                     spellCheck="false"
-                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal z-10"
-                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px` }}
+                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal z-10 overflow-auto" // Changed overflow to auto
+                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                     aria-label="Code Editor"
                 />
                 {/* The pre element displays the highlighted (virtualized) content */}
                 <pre
-                    className="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-hidden"
-                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px` }}
+                    className="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-y-hidden overflow-x-hidden" // Changed overflow to hidden for vertical axis
+                    style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                     aria-hidden="true"
                 >
                     <code

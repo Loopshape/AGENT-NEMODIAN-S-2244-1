@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode, GroundingChunk } from '../types';
@@ -11,7 +10,8 @@ interface HeaderProps {
     onRunAI: () => void;
     onRunOrchestrator: () => void;
     onShowHtmlSingleFile: () => void;
-    onFixCode: () => void; // New prop for AI Fix Code
+    onFixCode: () => void;
+    onGenerateCode: () => void; // New prop for AI Generate Code
 }
 
 /**
@@ -25,6 +25,7 @@ interface HeaderProps {
  * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
  * @param {() => void} props.onShowHtmlSingleFile - Opens the index.html file in the editor.
  * @param {() => void} props.onFixCode - Initiates an AI-driven quick code fix.
+ * @param {() => void} props.onGenerateCode - Opens the modal for AI code generation.
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
@@ -54,7 +55,13 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 onClick={props.onShowHtmlSingleFile}
                 className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
             >
-                Open index.html
+                Load Script
+            </button>
+            <button
+                onClick={props.onGenerateCode} // New button for AI Generate Code
+                className="bg-[#BB86FC] hover:bg-[#a082f0] text-xs px-2 py-1.5 rounded transition-colors"
+            >
+                AI Generate Code
             </button>
             <button
                 onClick={props.onFixCode}
@@ -124,7 +131,7 @@ interface FileExplorerProps {
 
 const FileExplorer: React.FC<FileExplorerProps> = (props) => {
     return (
-        <div className="text-xs text-[#999966]">
+        <div className="text-xs text-[#999966] font-mono">
             <FileTree {...props} node={props.fileSystem} path="" depth={0} />
         </div>
     );
@@ -226,6 +233,7 @@ const FileTreeItem: React.FC<
                             onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
                             onClick={(e) => e.stopPropagation()}
                             className="bg-[#22241e] text-white p-0 m-0 border border-[#999966] rounded h-5 text-xs w-full"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     ) : (
                         <span className="truncate">{name}</span>
@@ -307,7 +315,8 @@ interface LeftPanelProps extends FileExplorerProps {
     onSaveDraft: () => void;
     onLoadDraft: () => void;
     onCodeReview: () => void;
-    onFixCode: () => void; // New prop for AI Fix Code
+    onFixCode: () => void;
+    onGenerateCode: () => void; // New prop for AI Generate Code
 }
 
 /**
@@ -333,7 +342,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
         onSaveDraft,
         onLoadDraft,
         onCodeReview,
-        onFixCode, // Destructure new prop
+        onFixCode,
+        onGenerateCode, // Destructure new prop
         fileSystem,
         activePath,
         onOpenFile,
@@ -370,8 +380,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                         REDO
                     </button>
                     <button
-                        onClick={onFixCode} // New button for AI Fix Code
-                        className="bg-[#673AB7] hover:bg-[#855CCB] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                        onClick={onGenerateCode} // New button for AI Generate Code
+                        className="bg-[#BB86FC] hover:bg-[#a082f0] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                    >
+                        AI Generate Code
+                    </button>
+                    <button
+                        onClick={onFixCode}
+                        className="bg-[#673AB7] hover:bg-[#855CCB] text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         AI Fix Code
                     </button>
@@ -445,6 +461,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                                 onSettingsChange({ ...settings, agentCount: parseInt(e.target.value) })
                             }
                             className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                     <div className="mt-1">
@@ -459,6 +476,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                                 onSettingsChange({ ...settings, maxRounds: parseInt(e.target.value) })
                             }
                             className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </div>
@@ -476,6 +494,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                             value={editorFontSize}
                             onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
                             className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </div>
@@ -494,6 +513,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                                         ? 'bg-[#4ac94a]/30 text-white font-semibold'
                                         : 'bg-[#22241e]/50 hover:bg-[#a03333]'
                                 }`}
+                                style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             >
                                 State {index + 1}: {content.substring(0, 30).replace(/\s+/g, ' ')}...
                             </button>
@@ -822,6 +842,7 @@ export const Terminal: React.FC<TerminalProps> = ({ isOpen, onClose, history, on
                             className="w-full bg-transparent text-slate-300 font-mono text-sm focus:outline-none"
                             placeholder="Type a command..."
                             spellCheck="false"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </form>

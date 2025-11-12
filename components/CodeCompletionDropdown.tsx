@@ -65,6 +65,7 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
                 fontSize: `${fontSize}px`,
                 minWidth: '200px',
                 pointerEvents: 'auto', // Ensure it's interactive
+                fontFamily: 'Fira Code, monospace', // Ensure font consistency
             }}
             role="listbox"
             aria-label="Code Completion Suggestions"

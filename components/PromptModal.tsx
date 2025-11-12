@@ -225,6 +225,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                     : 'Describe what you want to generate, refactor, or optimize...'
                             }
                             className="w-full h-24 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
 
@@ -265,10 +266,12 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                 placeholder="Paste relevant code here..."
                                 className="w-full h-32 p-2 bg-[#22241e] text-transparent caret-white font-mono border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
                                 spellCheck="false"
+                                style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             />
                             <pre
                                 className="absolute top-0 left-0 w-full h-full p-2 font-mono pointer-events-none overflow-y-auto text-sm"
                                 aria-hidden="true"
+                                style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             >
                                 <code dangerouslySetInnerHTML={{ __html: highlightBasic(snippet, 'js') }} />
                             </pre>
@@ -285,6 +288,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                             onChange={(e) => setContext(e.target.value)}
                             placeholder="Provide any extra information, constraints, or requirements..."
                             className="w-full h-20 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                            style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </div>
