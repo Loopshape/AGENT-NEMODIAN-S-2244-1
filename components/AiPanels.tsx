@@ -184,11 +184,7 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
                                     >
                                         {chunk.web.title || chunk.web.uri}
                                     </a>
-                                    {chunk.web.snippet && (
-                                        <p className="text-slate-500 mt-0.5 ml-4 text-[0.65rem] line-clamp-2">
-                                            {chunk.web.snippet}
-                                        </p>
-                                    )}
+                                    {/* Removed chunk.web.snippet as per types.ts update */}
                                 </li>
                             )
                         )}
@@ -216,9 +212,7 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
                                         <div className="ml-4 mt-1 space-y-1">
                                             {chunk.maps.placeAnswerSources.map((source, j) => (
                                                 <div key={`maps-source-${i}-${j}`}>
-                                                  {/* FIX: Removed direct access to `source.displayText` as it is not defined on MapsPlaceAnswerSource. */}
-                                                  {/* The `displayText` property only exists within `reviewSnippets`. */}
-                                                  {/* If there's other information to display for the source itself, use `source.title` or `source.uri`. */}
+                                                  {/* FIX: `displayText` is a property of `reviewSnippets` items, not directly on `MapsPlaceAnswerSource`. */}
                                                     {source.reviewSnippets && source.reviewSnippets.length > 0 && (
                                                         <ul className="list-disc list-inside ml-2 text-slate-500 text-[0.6rem]">
                                                             {source.reviewSnippets.map((review, k) => (
@@ -376,42 +370,54 @@ const CodeReviewPanel: React.FC<{ findings: CodeReviewFinding[] }> = ({ findings
                             clipRule="evenodd"
                         />
                     </svg>
-                    <span>No Issues Found</span>
+                    <span>No issues found. Code looks great!</span>
                 </div>
-                <p className="text-xs text-gray-400">The AI reviewer analyzed the code and found no issues to report.</p>
             </div>
         );
     }
 
     return (
-        <div className="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4">
-            <div className="font-bold text-purple-400 mb-3 text-sm">AI Code Review Findings</div>
-            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                {findings.map((finding, i) => {
-                    const style = severityStyles[finding.severity] || severityStyles.Suggestion;
+        <div className="code-review-panel bg-black/20 border border-red-900/50 rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto">
+            <div className="flex items-center gap-2 font-bold text-[#CF6679] mb-3">
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                >
+                    <path
+                        fillRule="evenodd"
+                        d="M8.257 3.099c.765-1.3 2.647-1.3 3.412 0l7.288 12.414c.48 1.036-.263 2.148-1.442 2.148H2.492c-1.179 0-1.92-1.112-1.442-2.148L8.257 3.099zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                    />
+                </svg>
+                <span>AI Code Review Findings ({findings.length})</span>
+            </div>
+
+            <div className="flex flex-col gap-3">
+                {findings.map((f, i) => {
+                    const style = severityStyles[f.severity];
                     return (
-                        <div key={i} className={`finding-item bg-white/5 rounded p-2.5 border-l-4 ${style.borderColor}`}>
-                            <div className="flex items-center gap-3 mb-1.5">
-                                <div className={`flex items-center gap-1.5 font-bold text-xs ${style.color}`}>
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        className="h-4 w-4 flex-shrink-0"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={style.icon} />
-                                    </svg>
-                                    {finding.severity}
-                                </div>
-                                <div className="text-xs text-gray-400">
-                                    <span className="font-semibold">Line:</span> {finding.line_number}
-                                </div>
-                                <div className="text-xs text-gray-400">
-                                    <span className="font-semibold">Category:</span> {finding.category}
-                                </div>
+                        <div
+                            key={i}
+                            className={`bg-white/5 rounded p-2 border-l-4 ${style.borderColor}`}
+                        >
+                            <div className="flex items-center gap-2 text-xs font-semibold mb-1">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className={`h-4 w-4 ${style.color} flex-shrink-0`}
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={style.icon} />
+                                </svg>
+                                <span className={style.color}>{f.severity}</span>
+                                <span className="text-gray-400">|</span>
+                                <span className="text-sky-300">{f.category}</span>
+                                <span className="ml-auto text-gray-500">Line: {f.line_number}</span>
                             </div>
-                            <p className="text-xs text-slate-300 whitespace-pre-wrap">{finding.suggestion}</p>
+                            <p className="text-xs text-slate-300 ml-6">{f.suggestion}</p>
                         </div>
                     );
                 })}
@@ -430,11 +436,9 @@ interface AiResponsePanelProps {
 }
 
 /**
- * The main container panel for displaying all AI-related responses.
- * This component manages the presentation of agent statuses, consensus results,
- * grounding information, and the final generated code. It includes a search bar
- * to filter the displayed information, and provides actions to apply or copy the
- * generated code to the editor.
+ * The main panel for displaying AI responses, including generated code,
+ * multi-agent consensus results, and grounding sources. It provides actions
+ * to apply the code to the editor or copy it to the clipboard.
  * @param {AiResponsePanelProps} props - The component props.
  * @returns {React.ReactElement | null} The rendered AI response panel or null if not open.
  */
@@ -446,192 +450,114 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
     onCopyCode,
     originalCode,
 }) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState<'code' | 'diff'>('code');
+    const { agents, isLoading, consensus, generatedCode, groundingChunks, codeReviewFindings } = aiState;
 
-    useEffect(() => {
-        if (isOpen) {
-            setViewMode('code');
-            setSearchQuery(''); // Clear search on open
-            setDebouncedSearchQuery(''); // Clear debounced search on open
-        }
-    }, [isOpen]);
-
-    // Debounce effect for search query
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            setDebouncedSearchQuery(searchQuery);
-        }, 300); // 300ms debounce delay
-
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [searchQuery]);
+    // Filter out `nexus` and `echo` as they are orchestrating agents and not directly generating/contributing content.
+    const displayAgents = useMemo(
+        () => agents.filter((agent) => agent.name !== 'nexus' && agent.name !== 'echo'),
+        [agents]
+    );
 
     if (!isOpen) return null;
 
-    const codeToActOn = aiState.consensus?.selectedCandidate ?? aiState.generatedCode;
-    const lowerCaseQuery = debouncedSearchQuery.toLowerCase(); // Use debounced query for filtering
-
-    const filteredAgents = aiState.agents.filter((agent) => {
-        if (!lowerCaseQuery) return true;
-        const contentString = typeof agent.content === 'string' ? agent.content : '';
-        return (
-            agent.title.toLowerCase().includes(lowerCaseQuery) ||
-            agent.subtitle.toLowerCase().includes(lowerCaseQuery) ||
-            contentString.toLowerCase().includes(lowerCaseQuery)
-        );
-    });
-
-    const filteredConsensus = aiState.consensus
-        ? {
-              ...aiState.consensus,
-              allCandidates: aiState.consensus.allCandidates.filter((c) => {
-                  if (!lowerCaseQuery) return true;
-                  return (
-                      c.content.toLowerCase().includes(lowerCaseQuery) ||
-                      c.agents.join(', ').toLowerCase().includes(lowerCaseQuery)
-                  );
-              }),
-          }
-        : null;
-
-    const filteredGroundingChunks = aiState.groundingChunks?.filter((chunk) => {
-        if (!lowerCaseQuery) return true;
-        
-        // Check web chunks
-        if (chunk.web) {
-            if ((chunk.web.title || '').toLowerCase().includes(lowerCaseQuery) ||
-                chunk.web.uri.toLowerCase().includes(lowerCaseQuery) ||
-                (chunk.web.snippet || '').toLowerCase().includes(lowerCaseQuery)) {
-                return true;
-            }
-        }
-
-        // Check maps chunks
-        if (chunk.maps) {
-            if ((chunk.maps.title || '').toLowerCase().includes(lowerCaseQuery) ||
-                (chunk.maps.uri || '').toLowerCase().includes(lowerCaseQuery) ||
-                (chunk.maps.placeAnswerSources || []).some(source => 
-                    // FIX: `displayText` is a property of `reviewSnippets` items, not directly on `MapsPlaceAnswerSource`.
-                    // Updated to iterate through `reviewSnippets` to check `displayText` and `uri`.
-                    (source.reviewSnippets || []).some(review => 
-                        (review.displayText || '').toLowerCase().includes(lowerCaseQuery) ||
-                        (review.uri || '').toLowerCase().includes(lowerCaseQuery)
-                    )
-                )) {
-                return true;
-            }
-        }
-        return false;
-    });
+    const codeToDisplay = generatedCode || consensus?.selectedCandidate || '';
+    const showDiff = !!generatedCode && !!originalCode;
 
     return (
-        <div className="fixed bottom-20 right-5 w-[500px] max-h-[600px] bg-[#313328] border border-[#4ac94a] rounded-lg flex flex-col z-40 shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-gray-700 flex items-center gap-3 sticky top-0 bg-[#313328]/95 backdrop-blur-sm z-10">
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 text-gray-500 flex-shrink-0"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                >
-                    <path
-                        fillRule="evenodd"
-                        d="M8 4a4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
-                        clipRule="evenodd"
-                    />
-                </svg>
-                <input
-                    type="search"
-                    placeholder="Filter agents, code, or results..."
-                    value={searchQuery} // Input value controlled by immediate searchQuery
-                    onChange={(e) => setSearchQuery(e.target.value)} // Update searchQuery immediately
-                    className="w-full bg-transparent text-sm text-[#f0f0e0] placeholder-gray-500 focus:ring-0 outline-none border-none p-0"
-                    aria-label="Filter AI responses"
-                />
-                <button
-                    onClick={onClose}
-                    className="text-[#999966] text-2xl hover:text-red-500 transition-colors"
-                    aria-label="Close AI panel"
-                >
-                    &times;
-                </button>
-            </div>
+        <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-4xl bg-[#2e3026] border border-[#BB86FC] rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h2 className="text-lg font-bold text-[#f0f0e0] animation-title-pulse">Quantum AI Response</h2>
+                    <button onClick={onClose} className="text-xl text-gray-500 hover:text-white">
+                        &times;
+                    </button>
+                </header>
 
-            <div className="overflow-y-auto p-4">
-                {filteredAgents.map((agent) => (
-                    <AgentCard key={agent.name} agent={agent} />
-                ))}
+                <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
+                    <div className="agent-grid grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {displayAgents.map((agent) => (
+                            <AgentCard key={agent.name} agent={agent} />
+                        ))}
+                    </div>
 
-                {aiState.codeReviewFindings ? (
-                    <CodeReviewPanel findings={aiState.codeReviewFindings} />
-                ) : codeToActOn ? (
-                    <div className="code-container bg-black/30 rounded-lg mt-4 border border-gray-700 flex flex-col">
-                        <div className="flex items-center justify-between p-2 border-b border-gray-700 bg-black/20">
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={() => setViewMode('code')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${
-                                        viewMode === 'code'
-                                            ? 'bg-[#4ac94a] text-white font-semibold'
-                                            : 'hover:bg-white/10'
-                                    }`}
-                                >
-                                    Generated Code
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('diff')}
-                                    className={`px-3 py-1 text-xs rounded transition-colors ${
-                                        viewMode === 'diff'
-                                            ? 'bg-[#4ac94a] text-white font-semibold'
-                                            : 'hover:bg-white/10'
-                                    }`}
-                                >
-                                    Diff
-                                </button>
+                    {isLoading && (
+                        <div className="text-center text-lg text-[#03DAC6] mt-8 flex items-center justify-center gap-3">
+                            <div className="quantum-spinner w-6 h-6 inline-block relative">
+                                <div className="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div>
+                                <div className="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div>
                             </div>
-                            <span className="text-xs font-semibold text-[#4ac94a] animation-title-pulse">
-                                {viewMode === 'diff' ? 'Comparing with Editor' : 'Final Output'}
-                            </span>
+                            Processing Quantum Flux...
                         </div>
-                        <div className="p-3.5 max-h-72 overflow-y-auto">
-                            {viewMode === 'code' ? (
-                                <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
-                                    <code
-                                        dangerouslySetInnerHTML={{
-                                            __html: highlightMatches(codeToActOn, lowerCaseQuery || ''),
-                                        }}
+                    )}
+
+                    {codeReviewFindings && codeReviewFindings.length > 0 && (
+                        <CodeReviewPanel findings={codeReviewFindings} />
+                    )}
+                    {consensus && <ConsensusPanel consensus={consensus} />}
+                    {groundingChunks && groundingChunks.length > 0 && (
+                        <GroundingPanel chunks={groundingChunks} />
+                    )}
+
+                    {codeToDisplay && (
+                        <div className="generated-code-section mt-6">
+                            <h3 className="text-base font-bold text-[#BB86FC] mb-2 flex items-center gap-2">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                >
+                                    <path
+                                        fillRule="evenodd"
+                                        d="M10 2a8 8 0 100 16 8 8 0 000-16zM2 10a8 8 0 1116 0 8 8 0 01-16 0zm9.293-2.293a1 1 0 00-1.414-1.414L9 8.586 7.707 7.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clipRule="evenodd"
                                     />
-                                </pre>
-                            ) : (
-                                <DiffViewer before={originalCode} after={codeToActOn} query={lowerCaseQuery} />
-                            )}
+                                </svg>
+                                Generated Code:
+                            </h3>
+                            <div className="relative bg-black/20 rounded-lg p-3 border border-white/10">
+                                {showDiff ? (
+                                    <DiffViewer before={originalCode} after={codeToDisplay} />
+                                ) : (
+                                    <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
+                                        <code dangerouslySetInnerHTML={{ __html: highlightBasic(codeToDisplay, 'js') }} />
+                                    </pre>
+                                )}
+                            </div>
                         </div>
-                        <div className="p-2.5 border-t border-gray-700 flex gap-2">
+                    )}
+                </div>
+
+                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2 flex-shrink-0">
+                    {codeToDisplay && (
+                        <>
                             <button
-                                onClick={() => onCopyCode(codeToActOn)}
-                                className="flex-1 bg-[#4ac94a] hover:bg-green-400 text-xs px-2 py-1.5 rounded transition-colors"
+                                onClick={() => onCopyCode(codeToDisplay)}
+                                className="bg-[#03DAC6] hover:bg-[#03a99e] text-black font-bold px-4 py-2 rounded transition-colors"
                             >
                                 Copy Code
                             </button>
                             <button
-                                onClick={() => onApplyCode(codeToActOn)}
-                                className="flex-1 bg-[#5bc0de] hover:bg-cyan-400 text-xs px-2 py-1.5 rounded transition-colors"
+                                onClick={() => onApplyCode(codeToDisplay)}
+                                className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2 rounded transition-colors"
                             >
-                                Apply to Editor
+                                Apply Code
                             </button>
-                        </div>
-                    </div>
-                ) : null}
-
-                {filteredConsensus && filteredConsensus.allCandidates.length > 0 && (
-                    <ConsensusPanel consensus={filteredConsensus} />
-                )}
-                {/* Always show GroundingPanel if there are any chunks, even if filtered to none */}
-                {(aiState.groundingChunks?.length ?? 0) > 0 && (
-                    <GroundingPanel chunks={filteredGroundingChunks || []} />
-                )}
+                        </>
+                    )}
+                    <button
+                        onClick={onClose}
+                        className="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors"
+                    >
+                        Close
+                    </button>
+                </footer>
             </div>
         </div>
     );

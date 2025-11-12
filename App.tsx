@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type {
     Agent,
@@ -18,10 +17,10 @@ import type {
     CodeSnippet, // Import new CodeSnippet type
 } from './types';
 import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './components/ui';
-import { Editor } from './components/Editor';
 import { AiResponsePanel } from './components/AiPanels';
 import { PromptModal } from './components/PromptModal';
 import { CodeGenerationModal } from './components/CodeGenerationModal'; // Import new modal
+import { Editor } from './components/Editor'; // Import Editor component
 import { generateWithThinkingStream, runMultiAgentConsensus, personas, runCodeReview, quickFixCode } from './services/geminiService';
 import { get, set, unset } from './utils/fsHelpers';
 
@@ -181,7 +180,7 @@ const App: React.FC = () => {
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [isCodeGenerationModalOpen, setIsCodeGenerationModalOpen] = useState(false); // New state for code generation modal
     const [isTerminalOpen, setIsTerminalOpen] = useState(false);
-    const [isFindReplaceVisible, setIsFindReplaceVisible] = useState(false); // New state for Find/Replace widget
+    const [isFindReplaceVisible, setIsFindReplaceToggle] = useState(false); // New state for Find/Replace widget
 
     const [initialModalState, setInitialModalState] = useState<{
         prompt: string;
@@ -608,7 +607,7 @@ const App: React.FC = () => {
                     addToHistory('error', 'The --agents flag is required for "orch" command.');
                     break;
                 }
-                const selectedAgents = agentsStr.split(',').map((s) => s.trim());
+                const selectedAgents = agentsStr.split(',').map((s) => s.trim()).filter(Boolean);
                 if (selectedAgents.length < 2) {
                     addToHistory('error', 'Please provide at least two agents for consensus.');
                     break;
@@ -678,7 +677,7 @@ const App: React.FC = () => {
         setIsCodeGenerationModalOpen(true);
     };
 
-    const handleQuickAction = async (action: 'optimize' | 'document' | 'refactor') => {
+    const handleQuickAction = async (action: 'optimize' | 'document' | 'refactor' | 'beautify') => {
         if (aiState.isLoading || !activeFilePath) return;
 
         const prompts = {
@@ -687,6 +686,8 @@ const App: React.FC = () => {
                 'Add fractal documentation with quantum clarity to this code. Return only the complete, updated code block.',
             refactor:
                 'Refactor this code using quantum fractal patterns and hyperthreaded efficiency. Return only the complete, updated code block.',
+            beautify:
+                'Format and beautify this code according to best practices for readability. Do not change any logic. Return only the complete, formatted code block.', // New prompt for beautify
         };
 
         const currentPrompt = prompts[action];
@@ -828,6 +829,11 @@ const App: React.FC = () => {
         const fileName = prompt('Enter new file name:');
         if (!fileName) return;
         const newPath = `${path}/${fileName}`;
+        // Ensure new file name is valid before setting
+        if (!/^[a-zA-Z0-9_\-.]+$/.test(fileName)) {
+            alert('Invalid file name. Use alphanumeric, dashes, underscores, and dots.');
+            return;
+        }
         setFileSystem(fs => set(fs, newPath, { type: 'file', content: '' }));
     }, []);
 
@@ -835,18 +841,40 @@ const App: React.FC = () => {
         const folderName = prompt('Enter new folder name:');
         if (!folderName) return;
         const newPath = `${path}/${folderName}`;
+        // Ensure new folder name is valid before setting
+        if (!/^[a-zA-Z0-9_\-]+$/.test(folderName)) {
+            alert('Invalid folder name. Use alphanumeric, dashes, and underscores.');
+            return;
+        }
         setFileSystem(fs => set(fs, newPath, { type: 'folder', children: {} }));
     }, []);
 
     const handleRename = useCallback((path: string, newName: string) => {
         const parts = path.split('/');
         const oldName = parts.pop();
-        const parentPath = parts.join('/');
-        const newPath = `${parentPath}/${newName}`;
+        const parentPath = parts.slice(0, -1).join('/'); // FIX: Correctly get parent path
+        const newPath = `${parentPath ? parentPath : ''}/${newName}`;
+
+        if (!newName.trim()) {
+            alert('Name cannot be empty.');
+            return;
+        }
+        // Basic validation for new name (files can have dots, folders usually don't)
+        if (oldName?.includes('.') && !/^[a-zA-Z0-9_\-.]+$/.test(newName)) { // For files
+            alert('Invalid file name. Use alphanumeric, dashes, underscores, and dots.');
+            return;
+        } else if (!oldName?.includes('.') && !/^[a-zA-Z0-9_\-]+$/.test(newName)) { // For folders
+            alert('Invalid folder name. Use alphanumeric, dashes, and underscores.');
+            return;
+        }
+
 
         setFileSystem(fs => {
             const nodeToMove = get(fs, path);
-            if (!nodeToMove) return fs;
+            if (!nodeToMove) {
+                console.error(`Node not found at path: ${path}`);
+                return fs;
+            }
             const fsWithoutOld = unset(fs, path);
             const fsWithNew = set(fsWithoutOld, newPath, nodeToMove);
             return fsWithNew;
@@ -860,7 +888,7 @@ const App: React.FC = () => {
     }, [activeFilePath]);
 
     const handleDelete = useCallback((path: string) => {
-        if (!confirm(`Are you sure you want to delete "${path}"?`)) return;
+        if (!confirm(`Are you sure you want to delete "${path}"? This cannot be undone.`)) return;
 
         setFileSystem(fs => unset(fs, path));
 
@@ -957,11 +985,29 @@ const App: React.FC = () => {
         handleSetContent(code, selectionStart, selectionEnd);
     }, [handleSetContent, selectionStart, selectionEnd]);
 
+    // Handler for the new 'Save' button in the header
+    const handleSaveFile = useCallback(() => {
+        if (activeFilePath) {
+            setFileSystem((prevFs) => {
+                const newFs = { ...prevFs };
+                const node = get(newFs, activeFilePath);
+                if (node && node.type === 'file') {
+                    return set(newFs, activeFilePath, { ...node, content: editorContent });
+                }
+                return prevFs; // Should not happen if activeFilePath is valid and points to a file
+            });
+            // Optionally, add a visual cue that the file was saved
+            console.log(`File saved: ${fileName}`);
+        } else {
+            console.warn('No file open to save.');
+        }
+    }, [activeFilePath, editorContent, fileName]);
+
 
     return (
         <div
             className="h-screen w-screen grid grid-rows-[max-content_max-content_1fr_max-content] grid-cols-1 relative overflow-hidden"
-            style={{ gridTemplateAreas: '"header" "status" "main" "footer"' }}
+            // Removed gridTemplateAreas as it's not strictly needed here and can cause conflicts with dynamic rows/cols
         >
             {/* Hidden file input for "Load Script" functionality */}
             <input
@@ -979,12 +1025,13 @@ const App: React.FC = () => {
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
                 onLoadScript={handleLoadScript} // Use new handler
+                onSaveFile={handleSaveFile} // Pass new handler to Header
                 onFixCode={handleFixCode}
                 onGenerateCode={openCodeGenerationModal} // Pass new handler to Header
-                onFindReplaceToggle={() => setIsFindReplaceVisible((p) => !p)} // Pass toggle function
+                onFindReplaceToggle={() => setIsFindReplaceToggle((p) => !p)} // Pass toggle function
             />
             <StatusBar fileName={fileName} stats={stats} />
-            <main className="grid-in-main flex overflow-hidden">
+            <main className="flex overflow-hidden">
                 <LeftPanel
                     isOpen={isLeftPanelOpen}
                     settings={orchestratorSettings}
@@ -1026,7 +1073,7 @@ const App: React.FC = () => {
                         fontSize={editorFontSize}
                         onSelectionChange={(start, end) => { setSelectionStart(start); setSelectionEnd(end); }}
                         isFindReplaceOpen={isFindReplaceVisible} // Pass visibility state
-                        onFindReplaceToggle={() => setIsFindReplaceVisible((p) => !p)} // Pass toggle function
+                        onFindReplaceToggle={() => setIsFindReplaceToggle((p) => !p)} // Pass toggle function
                     />
                 </div>
             </main>

@@ -27,9 +27,7 @@ function formatGroundingChunksForCLI(chunks: GroundingChunk[]): string {
     chunks.forEach((chunk, i) => {
         if (chunk.web) {
             output += `\n[WEB ${i + 1}] Title: ${chunk.web.title || 'N/A'}\nURI: ${chunk.web.uri || 'N/A'}\n`;
-            if (chunk.web.snippet) {
-                output += `Snippet: ${chunk.web.snippet}\n`;
-            }
+            // FIX: Removed chunk.web.snippet as it is not present in the @google/genai GroundingChunkWeb type.
         }
         if (chunk.maps) {
             output += `\n[MAPS ${i + 1}] Title: ${chunk.maps.title || 'N/A'}\nURI: ${chunk.maps.uri || 'N/A'}\n`;

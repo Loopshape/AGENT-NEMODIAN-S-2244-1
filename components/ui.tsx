@@ -16,6 +16,7 @@ interface HeaderProps {
     onFixCode: () => void;
     onGenerateCode: () => void; // New prop for AI Generate Code
     onFindReplaceToggle: () => void; // New prop for Find/Replace
+    onSaveFile: () => void; // New prop for saving the current file
 }
 
 /**
@@ -31,10 +32,11 @@ interface HeaderProps {
  * @param {() => void} props.onFixCode - Initiates an AI-driven quick code fix.
  * @param {() => void} props.onGenerateCode - Opens the modal for AI code generation.
  * @param {() => void} props.onFindReplaceToggle - Toggles the Find/Replace widget.
+ * @param {() => void} props.onSaveFile - Saves the current editor content to the active file.
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
-    <header className="grid-in-header bg-[#2e3026] border-b border-[#22241e] flex items-center justify-between px-3 py-1.5 relative overflow-hidden quantum-scan">
+    <header className="bg-[#2e3026] border-b border-[#22241e] flex items-center justify-between px-3 py-1.5 relative overflow-hidden quantum-scan">
         <div className="flex gap-3 items-center z-10">
             <button onClick={props.onToggleLeftPanel} className="bg-[#a03333] hover:bg-[#3366a0] text-sm px-2 py-1.5 rounded transition-colors">
                 ☰
@@ -61,6 +63,12 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
             >
                 Load Script
+            </button>
+            <button
+                onClick={props.onSaveFile} // New button for saving the current file
+                className="bg-[#60A5FA] hover:bg-[#3B82F6] text-white text-xs px-2 py-1.5 rounded transition-colors"
+            >
+                Save
             </button>
             <button
                 onClick={props.onGenerateCode} // New button for AI Generate Code
@@ -112,7 +120,7 @@ interface StatusBarProps {
 export const StatusBar: React.FC<StatusBarProps> = ({ fileName, stats }) => (
     <div
         id="status-bar"
-        className="grid-in-status bg-[#22241e] flex justify-between items-center px-3 text-xs h-[1.5em] relative"
+        className="bg-[#22241e] flex justify-between items-center px-3 text-xs h-[1.5em] relative"
     >
         <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-30">
             {[...Array(5)].map((_, i) => (
@@ -337,7 +345,7 @@ interface LeftPanelProps extends FileExplorerProps {
     onSettingsChange: (newSettings: OrchestratorSettings) => void;
     onUndo: () => void;
     onRedo: () => void;
-    onQuickAction: (action: 'optimize' | 'document' | 'refactor') => void;
+    onQuickAction: (action: 'optimize' | 'document' | 'refactor' | 'beautify') => void; // Added 'beautify'
     onAnalyzeSelection: () => void; // New prop for Analyze Selection
     onRunOrchestrator: () => void;
     history: string[];
@@ -440,8 +448,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                         REDO
                     </button>
                     <button
+                        onClick={() => onQuickAction('beautify')} // Beautify button
+                        className="bg-[#2196F3] hover:bg-blue-600 text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                    >
+                        Beautify Code
+                    </button>
+                    <button
                         onClick={onGenerateCode} // New button for AI Generate Code
-                        className="bg-[#BB86FC] hover:bg-[#a082f0] text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                        className="bg-[#BB86FC] hover:bg-[#a082f0] text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         AI Generate Code
                     </button>
@@ -611,7 +625,7 @@ interface FooterProps {
  * @returns {React.ReactElement} The rendered footer component.
  */
 export const Footer: React.FC<FooterProps> = (props) => (
-    <footer className="grid-in-footer flex items-center justify-between px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
+    <footer className="flex items-center justify-between px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
         <div />
         <button
             onClick={props.onInvoke}
@@ -682,7 +696,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
             };
 
             window.addEventListener('mousemove', handleDragMove);
-            window.removeEventListener('mouseup', handleDragEnd); // FIX: Ensure handleDragEnd is only added once.
+            window.addEventListener('mouseup', handleDragEnd); // FIX: Ensure handleDragEnd is only added once.
         }
     };
 
@@ -713,7 +727,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
             };
 
             window.addEventListener('mousemove', handleResizeMove);
-            window.removeEventListener('mouseup', handleResizeEnd); // FIX: Ensure handleResizeEnd is only added once.
+            window.addEventListener('mouseup', handleResizeEnd); // FIX: Ensure handleResizeEnd is only added once.
         }
     };
 

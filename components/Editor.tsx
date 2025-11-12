@@ -403,25 +403,42 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         const matches: { start: number; end: number }[] = [];
         let searchContent = content;
         let query = findQuery;
+        let regexFlags = 'g';
 
         if (!caseSensitive) {
             searchContent = searchContent.toLowerCase();
             query = query.toLowerCase();
+            regexFlags += 'i';
         }
 
-        let lastIndex = 0;
-        while (lastIndex !== -1) {
-            const index = searchContent.indexOf(query, lastIndex);
-            if (index !== -1) {
-                matches.push({ start: index, end: index + query.length });
-                lastIndex = index + query.length;
-            } else {
-                lastIndex = -1;
+        if (useRegex) {
+            try {
+                const regex = new RegExp(query, regexFlags);
+                let match;
+                while ((match = regex.exec(searchContent)) !== null) {
+                    matches.push({ start: match.index, end: match.index + match[0].length });
+                }
+            } catch (e) {
+                console.error("Invalid regex:", e);
+                setAllMatches([]);
+                setCurrentMatchIndex(-1);
+                return;
+            }
+        } else {
+            let lastIndex = 0;
+            while (lastIndex !== -1) {
+                const index = searchContent.indexOf(query, lastIndex);
+                if (index !== -1) {
+                    matches.push({ start: index, end: index + query.length });
+                    lastIndex = index + query.length;
+                } else {
+                    lastIndex = -1;
+                }
             }
         }
         setAllMatches(matches);
         setCurrentMatchIndex(matches.length > 0 ? 0 : -1);
-    }, [content, findQuery, caseSensitive]);
+    }, [content, findQuery, caseSensitive, useRegex]);
 
     useEffect(() => {
         updateMatches();
@@ -817,17 +834,15 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                                 />
                                 <span className="ml-1">Aa</span>
                             </label>
-                            {/* Regex option currently deferred */}
-                            {/* <label className="flex items-center cursor-pointer opacity-50">
+                            <label className="flex items-center cursor-pointer">
                                 <input
                                     type="checkbox"
                                     checked={useRegex}
                                     onChange={(e) => setUseRegex(e.target.checked)}
                                     className="w-3 h-3 bg-[#22241e] border-[#999966] rounded text-[#03DAC6] focus:ring-0"
-                                    disabled
                                 />
                                 <span className="ml-1">.*</span>
-                            </label> */}
+                            </label>
                         </div>
                     </div>
                 )}

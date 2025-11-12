@@ -15,9 +15,6 @@ export interface Agent {
 }
 
 export interface MapsPlaceAnswerSource {
-    uri?: string;
-    title?: string;
-    // FIX: Explicitly define reviewSnippets as an array of objects.
     reviewSnippets?: {
         displayText?: string;
         uri?: string;
@@ -34,7 +31,7 @@ export interface GroundingChunk {
     web?: {
         uri?: string; // FIX: Made optional to align with @google/genai types
         title?: string; // FIX: Made optional to align with @google/genai types
-        snippet?: string; // Added snippet for more detailed search info
+        // FIX: Removed 'snippet' as it is not present in the @google/genai GroundingChunkWeb type.
     };
     maps?: MapsGrounding; // Added for Google Maps grounding
 }
