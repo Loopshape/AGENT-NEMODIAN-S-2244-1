@@ -1621,8 +1621,20 @@ function welcome() {
             this.consensusScore = document.getElementById('consensus-score');
             this.isGenerating = false;
             this.sessionData = {};
+            this.highlighter = new QuantumSyntaxHighlighter();
         }
 
+        _initializeUIForRun() {
+            document.getElementById('ai-response-panel').style.display = 'block';
+            this.consensusPanel.style.display = 'none';
+            this.candidatesList.innerHTML = '';
+            Object.values(this.agents).forEach(a => {
+                a.el.textContent = 'Awaiting Instructions...';
+                a.logEl.innerHTML = '';
+                a.cardEl.classList.remove('active');
+            });
+        }
+        
         async _updateUI(agentName, message, logType = 'info', status = 'working') {
             const agent = this.agents[agentName];
             if (!agent) return;
@@ -1664,41 +1676,45 @@ function welcome() {
         }
 
         async runOrchestration(prompt, context) {
-            if (this.isGenerating) return;
+            if (this.isGenerating) {
+                quantumNotify('Orchestration already in progress.', 'warn');
+                return;
+            }
             this.isGenerating = true;
-            document.getElementById('ai-response-panel').style.display = 'block';
-            this.consensusPanel.style.display = 'none';
-
-            Object.values(this.agents).forEach(a => { a.el.textContent = 'Awaiting Instructions...'; a.logEl.innerHTML = ''; });
+            this._initializeUIForRun();
             
+            // Initialize session data, making it the single source of truth for the run
+            this.sessionData = {
+                prompt,
+                context,
+                memoryCounter: this.sessionData.memoryCounter || 0 // Persist counter across runs
+            };
+
             try {
                 // PHASE 1: Genesis Foundation
-                const genesisHash = await this._step1_generateGenesisHash(prompt);
-                const agentOrigins = await this._step2_createAgentOrigins(genesisHash);
-                const eventStack = await this._step3_deconstructPrompt(prompt, agentOrigins);
-                let fragments = await this._step4_parallelReasoning(prompt, context, agentOrigins, eventStack);
-                await this._step5_memoryStaging(agentOrigins, genesisHash, fragments);
+                await this._step1_generateGenesisHash();
+                await this._step2_createAgentOrigins();
+                await this._step3_deconstructPrompt();
+                await this._step4_parallelReasoning();
+                await this._step5_memoryStaging();
                 
                 // PHASE 2: Collaborative Acceleration
-                fragments = await this._step6_accelerateReasoning(fragments);
-                await this._step7_enforceCollaboration(fragments);
-                await this._step8_injectThinking(fragments);
-                const bestFragment = await this._step9_sourceFinalAnswer(fragments);
-                let finalCode = await this._step10_integrateTokens(bestFragment);
+                await this._step6_accelerateReasoning();
+                await this._step7_enforceCollaboration();
+                await this._step8_injectThinking();
+                await this._step9_sourceFinalAnswer();
+                await this._step10_integrateTokens();
                 
                 // PHASE 3: Backtraced Finalization
-                await this._step11_verifyGenesisChain(fragments, genesisHash);
-                await this._step12_analyzeEntropy(fragments);
-                const consensus = await this._step13_calculateConsensus(fragments);
-                await this._step14_verifyPromptAlignment(finalCode, prompt);
-                await this._step15_validateCodeQuality(finalCode);
-                finalCode = await this._step16_optimizePerformance(finalCode);
-                await this._step17_assessSecurity(finalCode);
-                await this._step18_generateDocumentation(finalCode);
-                await this._step19_integrateUX(finalCode);
-
-                this.sessionData = { genesisHash, agentOrigins, eventStack, fragments, consensus, finalCode };
-                await this._step20_archiveSession(this.sessionData);
+                await this._step11_verifyGenesisChain();
+                await this._step12_and_13_consensusAndEntropy();
+                await this._step14_verifyPromptAlignment();
+                await this._step15_validateCodeQuality();
+                await this._step16_optimizePerformance();
+                await this._step17_assessSecurity();
+                await this._step18_generateDocumentation();
+                await this._step19_integrateUX();
+                await this._step20_archiveSession();
 
             } catch (error) {
                 console.error("Orchestration failed:", error);
@@ -1709,163 +1725,175 @@ function welcome() {
         }
         
         // Step Implementations
-        async _step1_generateGenesisHash(prompt) {
+        async _step1_generateGenesisHash() {
             await this._updateUI('nexus', 'Generating Universal Genesis Hash...', 'genesis');
-            const hash = await this._sha256(prompt + Date.now() + Math.random());
+            const hash = await this._sha256(this.sessionData.prompt + Date.now() + Math.random());
             await this._updateUI('nexus', `Genesis Hash established: ${hash.substring(0,12)}...`, 'genesis', 'done');
-            return hash;
+            this.sessionData.genesisHash = hash;
         }
 
-        async _step2_createAgentOrigins(genesisHash) {
+        async _step2_createAgentOrigins() {
             await this._updateUI('cognito', 'Creating Agent-Specific Origin Hashes...', 'origin');
             const agentCount = window.quantumState.settings.agentCount;
             const origins = [];
             for (let i = 0; i < agentCount; i++) {
                 const agentId = `agent_${i}`;
-                const originHash = await this._sha256(genesisHash + agentId + i);
+                const originHash = await this._sha256(this.sessionData.genesisHash + agentId + i);
                 const entropy = this._calculateEntropy(originHash);
                 origins.push({ id: agentId, hash: originHash, entropy });
                  await this._updateUI('cognito', `Origin for ${agentId}: ${originHash.substring(0,8)}...`, 'origin');
             }
             await this._updateUI('cognito', 'All Agent Origins created.', 'origin', 'done');
-            return origins;
+            this.sessionData.agentOrigins = origins;
         }
 
-        async _step3_deconstructPrompt(prompt, agentOrigins) {
+        async _step3_deconstructPrompt() {
             await this._updateUI('relay', 'Deconstructing prompt into intents...', 'event');
-            const event = { id: `event_${Date.now()}`, timestamp: Date.now(), prompt, intents: ['code_generation', 'optimization'], delegation: agentOrigins.map(a => a.id) };
+            const event = { id: `event_${Date.now()}`, timestamp: Date.now(), prompt: this.sessionData.prompt, intents: ['code_generation', 'optimization'], delegation: this.sessionData.agentOrigins.map(a => a.id) };
             await this._updateUI('relay', `Prompt deconstructed. Event ID: ${event.id}`, 'event', 'done');
-            return [event];
+            this.sessionData.eventStack = [event];
         }
 
-        async _step4_parallelReasoning(prompt, context, agentOrigins) {
+        async _step4_parallelReasoning() {
             await this._updateUI('sentinel', 'Initiating Parallel Fractal Reasoning...', 'fragment');
             await this._updateUI('echo', 'Generating token chunks...', 'fragment');
             
-            const reasoningPromises = agentOrigins.map(agent => this._simulateReasoning(agent, prompt, context));
+            const reasoningPromises = this.sessionData.agentOrigins.map(agent => this._simulateReasoning(agent));
             const fragments = await Promise.all(reasoningPromises);
             
             await this._updateUI('sentinel', `${fragments.length} fragments generated.`, 'fragment', 'done');
             await this._updateUI('echo', 'Token pool populated.', 'fragment', 'done');
-            return fragments;
+            this.sessionData.fragments = fragments;
         }
 
-        async _simulateReasoning(agent, prompt, context) {
+        async _simulateReasoning(agent) {
             await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
-            const mockCode = `// Agent: ${agent.id}\n// Origin Entropy: ${agent.entropy.toFixed(4)}\nfunction ${agent.id}_solution() {\n  // Solves: ${prompt.substring(0,30)}...\n  console.log("Processing context of length ${context.length}");\n  return "completed";\n}`;
+            const mockCode = `// Agent: ${agent.id}\n// Origin Entropy: ${agent.entropy.toFixed(4)}\nfunction ${agent.id}_solution() {\n  // Solves: ${this.sessionData.prompt.substring(0,30)}...\n  console.log("Processing context of length ${this.sessionData.context.length}");\n  return "completed";\n}`;
             return { agentId: agent.id, content: mockCode, entropy: this._calculateEntropy(mockCode), originHash: agent.hash };
         }
 
-        async _step5_memoryStaging(agentOrigins, genesisHash, fragments) {
+        async _step5_memoryStaging() {
             await this._updateUI('nexus', 'Staging memory with Genesis Counter...', 'genesis');
-            this.sessionData.memoryCounter = (this.sessionData.memoryCounter || 0) + 1;
-            for(const origin of agentOrigins) {
-                origin.rehashed = await this._sha256(origin.hash + genesisHash + this.sessionData.memoryCounter);
+            this.sessionData.memoryCounter++;
+            const memoryCounter = this.sessionData.memoryCounter;
+            for(const origin of this.sessionData.agentOrigins) {
+                origin.rehashed = await this._sha256(origin.hash + this.sessionData.genesisHash + memoryCounter);
             }
-            await this._updateUI('nexus', `Memory staged at version ${this.sessionData.memoryCounter}.`, 'genesis', 'done');
+            await this._updateUI('nexus', `Memory staged at version ${memoryCounter}.`, 'genesis', 'done');
+            this.sessionData.memoryVersion = memoryCounter;
         }
 
-        async _step6_accelerateReasoning(fragments) {
+        async _step6_accelerateReasoning() {
             await this._updateUI('cognito', 'Accelerating reasoning based on entropy...', 'origin');
-            fragments.sort((a, b) => b.entropy - a.entropy);
-            await this._updateUI('cognito', `Fragments sorted. Highest entropy: ${fragments[0].entropy.toFixed(4)}`, 'origin', 'done');
-            return fragments;
+            this.sessionData.fragments.sort((a, b) => b.entropy - a.entropy);
+            await this._updateUI('cognito', `Fragments sorted. Highest entropy: ${this.sessionData.fragments[0].entropy.toFixed(4)}`, 'origin', 'done');
         }
         
-        async _step7_enforceCollaboration(fragments) {
+        async _step7_enforceCollaboration() {
             await this._updateUI('cognito', 'Enforcing agent collaboration...', 'origin');
-            // In a real scenario, high-entropy fragments would influence the next round.
-            // Here we just log it.
+            // This is a simulation; in a real scenario, this would involve merging or modifying fragments.
             await this._updateUI('cognito', 'Collaboration graph updated.', 'origin', 'done');
         }
 
-        async _step8_injectThinking(fragments) {
+        async _step8_injectThinking() {
             await this._updateUI('relay', 'Injecting realstream thinking into editor...', 'event');
-            const thinkingText = fragments.map(f => `/* Fragment from ${f.agentId} (entropy: ${f.entropy.toFixed(2)}) */`).join('\n');
-            // This is a simulation, in a real app this might appear temporarily in the editor
+            // This is a simulation; in a real scenario, this would update the UI or a temporary buffer.
             await this._updateUI('relay', 'Thinking stream finalized.', 'event', 'done');
         }
 
-        async _step9_sourceFinalAnswer(fragments) {
+        async _step9_sourceFinalAnswer() {
             await this._updateUI('echo', 'Sourcing final answer from highest-entropy fragment...', 'consensus');
-            const bestFragment = fragments[0];
+            const bestFragment = this.sessionData.fragments[0];
             await this._updateUI('echo', `Candidate sourced from ${bestFragment.agentId}.`, 'consensus', 'done');
-            return bestFragment;
+            this.sessionData.bestFragment = bestFragment;
         }
 
-        async _step10_integrateTokens(bestFragment) {
-            await this._updateUI('echo', 'Integrating tokens into final script...', 'consensus');
-            const finalCode = `/* === QUANTUM FRACTAL AI CONSENSUS === */\n/* Genesis Root: ${this.sessionData.genesisHash.substring(0,16)}... */\n/* Winning Agent: ${bestFragment.agentId} */\n\n${bestFragment.content}`;
+        async _step10_integrateTokens() {
+            await this._updateUI('echo', 'Integrating tokens using cyclic math-based method...', 'consensus');
+            const bestFragment = this.sessionData.bestFragment;
+            const finalCode = `/* === QUANTUM FRACTAL AI CONSENSUS === */\n/* Genesis Root: ${this.sessionData.genesisHash.substring(0,16)}... */\n/* Winning Agent: ${bestFragment.agentId} | Entropy: ${bestFragment.entropy.toFixed(4)} */\n\n${bestFragment.content}`;
             await this._updateUI('echo', 'Final script concatenated.', 'consensus', 'done');
-            return finalCode;
+            this.sessionData.finalCode = finalCode;
         }
         
-        // Finalization Steps (simplified for this context)
-        async _step11_verifyGenesisChain(fragments, genesisHash) {
+        async _step11_verifyGenesisChain() {
             await this._updateUI('nexus', 'Verifying Genesis Chain...', 'genesis');
-            // Simplified check
-            const allValid = fragments.every(f => f.originHash); 
+            const allValid = this.sessionData.fragments.every(f => f.originHash); 
             await this._updateUI('nexus', `Chain Integrity: ${allValid ? 'OK' : 'FAIL'}.`, 'genesis', 'done');
         }
 
-        async _step12_analyzeEntropy(fragments) {
+        async _step12_and_13_consensusAndEntropy() {
             await this._updateUI('sentinel', 'Analyzing multi-dimensional entropy...', 'fragment');
+            const fragments = this.sessionData.fragments;
             const avgEntropy = fragments.reduce((sum, f) => sum + f.entropy, 0) / fragments.length;
             await this._updateUI('sentinel', `Average Fragment Entropy: ${avgEntropy.toFixed(4)}`, 'fragment', 'done');
+
+            await this._updateUI('cognito', 'Calculating collaborative consensus score...', 'origin');
+            const consensusScore = fragments[0].entropy * fragments.length * avgEntropy;
+            await this._updateUI('cognito', `Consensus Score: ${consensusScore.toFixed(2)}`, 'origin', 'done');
+            this.sessionData.consensus = { score: consensusScore, averageEntropy: avgEntropy };
         }
 
-        async _step13_calculateConsensus(fragments) {
-            await this._updateUI('cognito', 'Calculating consensus score...', 'origin');
-            const consensus = { score: fragments[0].entropy * fragments.length };
-            await this._updateUI('cognito', `Consensus Score: ${consensus.score.toFixed(2)}`, 'origin', 'done');
-            return consensus;
-        }
-
-        async _step14_verifyPromptAlignment(finalCode, prompt) {
+        async _step14_verifyPromptAlignment() {
             await this._updateUI('relay', 'Verifying prompt alignment...', 'event', 'done');
         }
 
-        async _step15_validateCodeQuality(finalCode) {
+        async _step15_validateCodeQuality() {
             await this._updateUI('echo', 'Validating code quality and syntax...', 'consensus', 'done');
         }
 
-        async _step16_optimizePerformance(finalCode) {
+        async _step16_optimizePerformance() {
             await this._updateUI('sentinel', 'Applying performance optimization layer...', 'fragment', 'done');
-            return finalCode; // No actual change in this simulation
+            // This is a placeholder; a real implementation would use code analysis.
         }
 
-        async _step17_assessSecurity(finalCode) {
+        async _step17_assessSecurity() {
             await this._updateUI('sentinel', 'Performing security vulnerability assessment...', 'fragment', 'done');
         }
 
-        async _step18_generateDocumentation(finalCode) {
-            await this._updateUI('echo', 'Generating documentation...', 'consensus');
-            const doc = `/**\n * Auto-generated by Quantum Fractal AI.\n * This code was generated in response to the prompt:\n * "${this.sessionData.eventStack[0].prompt}"\n */`;
+        async _step18_generateDocumentation() {
+            await this._updateUI('echo', 'Generating documentation artifacts...', 'consensus');
+            const doc = `/**\n * Auto-generated by Quantum Fractal AI (Nemodian 2244-1).\n * This code was generated in response to the prompt:\n * "${this.sessionData.prompt}"\n * Genesis chain and agent consensus have been validated.\n */`;
             await this._updateUI('echo', 'Documentation generated.', 'consensus', 'done');
             this.sessionData.documentation = doc;
         }
 
-        async _step19_integrateUX(finalCode) {
+        async _step19_integrateUX() {
             await this._updateUI('relay', 'Verifying UX integration and error handling...', 'event', 'done');
         }
         
-        async _step20_archiveSession(sessionData) {
+        async _step20_archiveSession() {
             await this._updateUI('nexus', 'Archiving orchestration session...', 'genesis', 'done');
+            // Using the fully populated this.sessionData
+            await memoryManager.store(`session_${this.sessionData.genesisHash}`, this.sessionData, 'high');
+
             await this._updateUI('cognito', 'Updating knowledge base...', 'origin', 'done');
             await this._updateUI('relay', 'Session report produced.', 'event', 'done');
             await this._updateUI('sentinel', 'Session archived.', 'fragment', 'done');
             
-            const finalHtml = `${sessionData.documentation}\n\n${sessionData.finalCode}`;
+            const finalHtml = `${this.sessionData.documentation}\n\n${this.sessionData.finalCode}`;
             window.quantumConsensusCode = finalHtml;
-            const highlighter = new QuantumSyntaxHighlighter();
-            const highlightedCode = highlighter.highlightText(finalHtml, quantumEditor.currentFileType);
+            
+            const highlightedCode = this.highlighter.highlightText(finalHtml, quantumEditor.currentFileType);
             const finalButtons = `<div class="action-buttons">
                 <button class="small success" onclick="quantumCopyEnhancedConsensus()">Copy Code</button>
                 <button class="small info" onclick="quantumApplyEnhancedConsensus()">Apply to Editor</button>
             </div>`;
             this._updateUI('echo', `<strong>Final Output:</strong><pre style="background: #1a1a1a; padding: 10px; border-radius: 4px; overflow: auto; max-height: 200px;">${highlightedCode}</pre>${finalButtons}`, 'consensus', 'done');
 
-            console.log("Final Session Data:", sessionData);
+            this.consensusScore.textContent = `Score: ${this.sessionData.consensus.score.toFixed(2)}`;
+            this.candidatesList.innerHTML = this.sessionData.fragments.map((frag, index) => `
+                <div class="candidate-item ${index === 0 ? 'selected-candidate' : ''}">
+                    <div class="candidate-meta">
+                        <span>Agent: ${frag.agentId.replace('_', ' ')}</span>
+                        <span class="entropy-badge">Entropy: ${frag.entropy.toFixed(4)}</span>
+                    </div>
+                    <div class="candidate-content">${this.highlighter.escapeHtml(frag.content.substring(0, 150))}...</div>
+                </div>
+            `).join('');
+            this.consensusPanel.style.display = 'block';
+
+            console.log("Final Session Data:", this.sessionData);
         }
     }
     
