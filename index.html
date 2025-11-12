@@ -2369,6 +2369,11 @@ function welcome() {
                 
                 this.sessionData.consensus.finalCode = finalCode;
 
+                // Display final results in UI before archiving and closing
+                await this.displayEnhancedConsensusResults(this.sessionData.consensus, this.sessionData.allCandidates);
+                await this.addLog('echo', `Final consensus reached. Displaying result.`, 'consensus');
+                await new Promise(r => setTimeout(r, 4000)); // Pause to let user see final result
+
                 // == Step 20: Final Actions ==
                 await this.step20_ArchiveSession(this.sessionData);
                 await this.addLog('nexus', 'Injecting final code into editor...', 'archive');
@@ -2475,13 +2480,14 @@ function welcome() {
         async step6_PerformFractalReasoning(agent, prompt, context, round) {
             await this.addLog( 'cognito', `Agent ${agent.id} applying fractal reasoning...`, 'fragment');
             await new Promise(r => setTimeout(r, 100 + (Math.random() * 200)));
-            // This is a simplified simulation of code generation
+            // This is a simplified simulation of code generation, now incorporating the original context.
             return `// Agent: ${agent.id} | Round: ${round+1} | Origin: ${agent.origin.substring(0,8)}
-function ${agent.id.replace('-','_')}_solution() {
-    // Solution based on prompt: "${prompt.substring(0, 30)}..."
-    // Applying fractal logic to context...
-    console.log("Quantum-optimized output for agent ${agent.id}");
-}`;
+// Applying fractal logic based on prompt: "${prompt.substring(0, 30)}..."
+
+// --- BEGIN Modified Context ---
+${context}
+// --- END Modified Context ---
+`;
         }
 
         async step7_EnforceCollaboration(fragment, round) {
@@ -2506,6 +2512,8 @@ function ${agent.id.replace('-','_')}_solution() {
             const minThreshold = 5.0;
             const thresholdMet = topGroup.score >= minThreshold;
             await this.addLog('cognito', `Consensus score (${topGroup.score.toFixed(3)}) meets minimum threshold (${minThreshold}): ${thresholdMet ? 'Yes' : 'No'}`, 'consensus');
+            const qualityMetric = thresholdMet ? 'High' : 'Low';
+            await this.addLog('cognito', `Generated collaboration quality metric: ${qualityMetric}`, 'consensus');
 
             return {
                 genesis,
@@ -2520,7 +2528,9 @@ function ${agent.id.replace('-','_')}_solution() {
         scoreCandidates(allCandidates) {
              const candidateGroups = {};
             for (const candidate of allCandidates) {
-                const key = candidate.candidate.substring(0, 100);
+                const coreContentMatch = candidate.candidate.match(/\/\/ --- BEGIN Modified Context ---\s*([\s\S]*?)\s*\/\/ --- END Modified Context ---/);
+                const key = coreContentMatch ? coreContentMatch[1].trim() : candidate.candidate; // Use extracted content or fallback
+
                 if (!candidateGroups[key]) {
                     candidateGroups[key] = { candidates: [], totalEntropy: 0, agents: new Set() };
                 }
@@ -2784,157 +2794,110 @@ function ${agent.id.replace('-','_')}_solution() {
             initQuantumPreview();
             initQuantumLeftPanel();
             initQuantumQuickActions();
-            
-            quantumNotify('Quantum Fractal AI Editor Ready', 'success');
         } catch (error) {
-            console.error('Initialization failed:', error);
-            quantumNotify('Initialization failed - check console', 'error');
+            console.error("Initialization failed:", error);
+            document.body.innerHTML = '<h1>Critical Error</h1><p>Could not initialize Quantum Editor. Please check the console for details.</p>';
         }
     });
 
-    // Global error handler
-    window.addEventListener('error', (event) => {
-        console.error('Global error:', event.error);
-        if (memoryManager) {
-            memoryManager.emergencyCleanup();
-        }
-    });
-
-    // File handling functions
     function initQuantumFileHandling() {
-        document.getElementById('open-file').addEventListener('click', () => {
-            document.getElementById('file-input').click();
-        });
+        const fileInput = document.getElementById('file-input');
 
-        document.getElementById('file-input').addEventListener('change', handleFileOpen);
+        document.getElementById('open-file').addEventListener('click', () => fileInput.click());
         document.getElementById('save-file').addEventListener('click', quantumSaveFile);
-        document.getElementById('save-as').addEventListener('click', quantumSaveAsFile);
-    }
+        document.getElementById('save-as').addEventListener('click', () => quantumSaveFile(true));
 
-    function handleFileOpen(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(ev) {
-            const fileName = file.name;
-            const fileType = quantumEditor.highlighter.detectLanguage(fileName);
-            const content = ev.target.result;
-
-            quantumEditor.setContent(content, fileType);
-            document.getElementById('file-meta').textContent = fileName;
-            quantumEditor.currentFileName = fileName;
-
-            // Add to recent files
-            memoryManager.addRecentFile(fileName, content);
-        };
-        reader.readAsText(file);
-    }
-
-    function quantumSaveFile() {
-        if (!quantumEditor.currentFileName) {
-            quantumSaveAsFile();
-            return;
-        }
-
-        const blob = new Blob([quantumEditor.getContent()], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = quantumEditor.currentFileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(a.href);
-        
-        quantumNotify('File saved successfully', 'success');
-    }
-
-    function quantumSaveAsFile() {
-        const fileName = prompt('Enter file name:', quantumEditor.currentFileName || 'quantum_code.js');
-        if (fileName) {
-            quantumEditor.currentFileName = fileName;
-            const fileType = quantumEditor.highlighter.detectLanguage(fileName);
-            quantumEditor.setContent(quantumEditor.getContent(), fileType);
-            document.getElementById('file-meta').textContent = fileName;
-            quantumSaveFile();
-        }
-    }
-
-    // AI functionality
-    function initQuantumAI() {
-        document.getElementById('send-button').addEventListener('click', runQuantumAI);
-        document.getElementById('run-local-ai').addEventListener('click', runQuantumAI);
-
-        document.getElementById('prompt-input').addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                e.preventDefault();
-                runQuantumAI();
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const content = e.target.result;
+                    const fileType = quantumEditor.highlighter.detectLanguage(file.name);
+                    quantumEditor.setContent(content, fileType);
+                    document.getElementById('file-meta').textContent = file.name;
+                    quantumEditor.currentFileName = file.name;
+                    memoryManager.addRecentFile(file.name, content);
+                };
+                reader.readAsText(file);
             }
         });
+    }
 
+    function quantumSaveFile(saveAs = false) {
+        let fileName = quantumEditor.currentFileName;
+        if (saveAs || !fileName) {
+            fileName = prompt("Save as:", fileName || "untitled.js");
+            if (!fileName) return; // User cancelled
+            quantumEditor.currentFileName = fileName;
+        }
+
+        const content = quantumEditor.getContent();
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        document.getElementById('file-meta').textContent = fileName;
+        memoryManager.addRecentFile(fileName, content);
+        quantumNotify(`${fileName} saved`, 'success');
+    }
+
+    function initQuantumAI() {
+        document.getElementById('send-button').addEventListener('click', runSingleAgentAI);
+        document.getElementById('prompt-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                runSingleAgentAI();
+            }
+        });
+        document.getElementById('run-local-ai').addEventListener('click', runSingleAgentAI);
+    }
+    
+    function runSingleAgentAI() {
+        enhancedOrchestrator.runFullOrchestration();
+    }
+
+    function initQuantumPreview() {
+        document.getElementById('render-html').addEventListener('click', renderQuantumHTML);
+        document.getElementById('btn-render').addEventListener('click', renderQuantumHTML);
+        document.getElementById('close-preview').addEventListener('click', () => {
+            document.getElementById('preview-panel').style.display = 'none';
+        });
+    }
+    
+    function renderQuantumHTML() {
+        const content = quantumEditor.getContent();
+        const previewFrame = document.getElementById('preview-content');
+        const previewPanel = document.getElementById('preview-panel');
+        
+        previewFrame.srcdoc = content;
+        previewPanel.style.display = 'flex';
+    }
+
+    function initQuantumLeftPanel() {
+        document.getElementById('left-toggle').addEventListener('click', () => {
+            document.getElementById('editor-stage').classList.toggle('left-panel-open');
+        });
+    }
+
+    function initQuantumQuickActions() {
+        document.getElementById('btn-undo').addEventListener('click', () => quantumEditor.undo());
+        document.getElementById('btn-redo').addEventListener('click', () => quantumEditor.redo());
+        document.getElementById('btn-beautify').addEventListener('click', () => quantumEditor.beautifyCode());
+        
+        // Orchestrator actions
+        document.getElementById('btn-optimize').addEventListener('click', () => enhancedOrchestrator.quantumOptimize());
+        document.getElementById('btn-document').addEventListener('click', () => enhancedOrchestrator.quantumDocument());
+        document.getElementById('btn-refactor').addEventListener('click', () => enhancedOrchestrator.quantumRefactor());
+        
+        // Panel close button
         document.getElementById('close-ai-panel').addEventListener('click', () => {
             document.getElementById('ai-response-panel').style.display = 'none';
         });
     }
 
-    function runQuantumAI() {
-        const promptInput = document.getElementById('prompt-input');
-        const prompt = promptInput.value.trim();
-        if (!prompt) return;
-
-        if (quantumEditor.multiAgentMode) {
-            enhancedOrchestrator.runFullOrchestration();
-        } else {
-            quantumNotify('Enhanced orchestration required for full functionality', 'warn');
-        }
-        promptInput.value = '';
-    }
-
-    // Preview functionality
-    function initQuantumPreview() {
-        document.getElementById('btn-render').addEventListener('click', renderQuantumHTML);
-        document.getElementById('render-html').addEventListener('click', renderQuantumHTML);
-
-        document.getElementById('close-preview').addEventListener('click', () => {
-            document.getElementById('preview-panel').style.display = 'none';
-            const previewContent = document.getElementById('preview-content');
-            if (previewContent.src.startsWith('blob:')) {
-                URL.revokeObjectURL(previewContent.src);
-            }
-        });
-    }
-
-    function renderQuantumHTML() {
-        try {
-            const blob = new Blob([quantumEditor.getContent()], { type: 'text/html' });
-            const previewContent = document.getElementById('preview-content');
-            previewContent.src = URL.createObjectURL(blob);
-            document.getElementById('preview-panel').style.display = 'flex';
-        } catch (e) {
-            alert('Quantum rendering error: ' + e.message);
-        }
-    }
-
-    // Left panel functionality
-    function initQuantumLeftPanel() {
-        document.getElementById('left-toggle').addEventListener('click', () => {
-            const isOpen = document.getElementById('editor-stage').classList.toggle('left-panel-open');
-            document.getElementById('left-toggle').textContent = isOpen ? '✕' : '☰';
-        });
-
-        document.getElementById('btn-undo').addEventListener('click', () => quantumEditor.undo());
-        document.getElementById('btn-redo').addEventListener('click', () => quantumEditor.redo());
-        document.getElementById('btn-beautify').addEventListener('click', () => quantumEditor.beautifyCode());
-    }
-
-    // Quick actions
-    function initQuantumQuickActions() {
-        document.getElementById('btn-optimize').addEventListener('click', () => enhancedOrchestrator.quantumOptimize());
-        document.getElementById('btn-document').addEventListener('click', () => enhancedOrchestrator.quantumDocument());
-        document.getElementById('btn-refactor').addEventListener('click', () => enhancedOrchestrator.quantumRefactor());
-    }
-
 </script>
-<script type="module" src="index.tsx"></script>
 </body>
 </html>
