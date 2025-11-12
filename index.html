@@ -1413,7 +1413,7 @@ function welcome() {
         detectLanguage(filename) {
             const ext = filename.split('.').pop().toLowerCase();
             const languageMap = { 'js': 'javascript', 'html': 'html', 'css': 'css', 'py': 'python', 'json': 'json', 'txt': 'javascript' };
-            return languageMap[ext] || 'javascript';
+            return languageMap[ext] || 'html';
         }
 
         escapeHtml(text) {
@@ -1425,7 +1425,7 @@ function welcome() {
             const patterns = this.languagePatterns[lang] || this.languagePatterns.javascript;
             let highlighted = this.escapeHtml(text);
             patterns.forEach(({ pattern, type }) => {
-                highlighted = highlighted.replace(pattern, match => `<span class="sh-${type}">${match}</span>`);
+                highlighted = highlighted.replace(pattern, match => `<span class="sh-token sh-${type}">${match}</span>`);
             });
             return highlighted;
         }
@@ -1437,11 +1437,18 @@ function welcome() {
             const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
             if (range) {
                 const { startContainer, startOffset, endContainer, endOffset } = range;
-                element.innerHTML = highlightedHtml;
+                const tempEl = document.createElement('div');
+                tempEl.innerHTML = highlightedHtml;
+                element.innerHTML = '';
+                while (tempEl.firstChild) {
+                    element.appendChild(tempEl.firstChild);
+                }
+
                 try {
                     const newRange = document.createRange();
-                    newRange.setStart(startContainer, startOffset);
-                    newRange.setEnd(endContainer, endOffset);
+                    // This is a naive way to restore selection and may not work for complex cases
+                    newRange.setStart(element.firstChild || element, Math.min(startOffset, element.textContent.length));
+                    newRange.setEnd(element.firstChild || element, Math.min(endOffset, element.textContent.length));
                     selection.removeAllRanges();
                     selection.addRange(newRange);
                 } catch(e) { /* Range might be invalid after highlight */ }
@@ -1587,6 +1594,18 @@ function welcome() {
         }
 
         getContent() { return this.editor.textContent; }
+
+        getSelectedText() {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                const text = range.toString();
+                if (text.length > 0) {
+                    return text;
+                }
+            }
+            return this.getContent(); // Fallback to all content
+        }
         
         initQuantumVisuals() {
             const threadsContainer = document.getElementById('quantum-threads');
@@ -1600,7 +1619,34 @@ function welcome() {
         }
         
         beautifyCode() {
-            quantumNotify('Beautify not yet implemented.', 'warn');
+            try {
+                const code = this.getContent();
+                let formattedCode = '';
+                let indentLevel = 0;
+                const indentChar = '    ';
+
+                const lines = code.split('\n');
+                lines.forEach(line => {
+                    let trimmedLine = line.trim();
+                    if (trimmedLine.startsWith('}') || trimmedLine.startsWith(']') || trimmedLine.startsWith(')')) {
+                        indentLevel = Math.max(0, indentLevel - 1);
+                    }
+                    
+                    if(trimmedLine.length > 0) {
+                        formattedCode += indentChar.repeat(indentLevel) + trimmedLine + '\n';
+                    }
+
+                    if (trimmedLine.endsWith('{') || trimmedLine.endsWith('[') || trimmedLine.endsWith('(')) {
+                        indentLevel++;
+                    }
+                });
+                
+                this.setContent(formattedCode.trim(), this.currentFileType);
+                quantumNotify('Code beautified.', 'success');
+            } catch (e) {
+                console.error('Beautify failed:', e);
+                quantumNotify('Beautification failed.', 'error');
+            }
         }
     }
 
@@ -1879,7 +1925,7 @@ function welcome() {
                 <button class="small success" onclick="quantumCopyEnhancedConsensus()">Copy Code</button>
                 <button class="small info" onclick="quantumApplyEnhancedConsensus()">Apply to Editor</button>
             </div>`;
-            this._updateUI('echo', `<strong>Final Output:</strong><pre style="background: #1a1a1a; padding: 10px; border-radius: 4px; overflow: auto; max-height: 200px;">${highlightedCode}</pre>${finalButtons}`, 'consensus', 'done');
+            this._updateUI('echo', `<strong>Final Output:</strong><pre style="background: #1a1a1a; padding: 10px; border-radius: 4px; overflow: auto; max-height: 200px;">${this.highlighter.escapeHtml(highlightedCode)}</pre>${finalButtons}`, 'consensus', 'done');
 
             this.consensusScore.textContent = `Score: ${this.sessionData.consensus.score.toFixed(2)}`;
             this.candidatesList.innerHTML = this.sessionData.fragments.map((frag, index) => `
@@ -1921,7 +1967,7 @@ function welcome() {
             quantumEditor = new QuantumEditor();
             enhancedOrchestrator = new EnhancedQuantumOrchestrator();
             
-            // Simplified init calls
+            // --- EVENT LISTENERS ---
             document.getElementById('open-file').addEventListener('click', () => document.getElementById('file-input').click());
             document.getElementById('file-input').addEventListener('change', (e) => handleFileOpen(e));
             document.getElementById('save-file').addEventListener('click', quantumSaveFile);
@@ -1936,6 +1982,46 @@ function welcome() {
             document.getElementById('btn-undo').addEventListener('click', () => quantumEditor.undo());
             document.getElementById('btn-redo').addEventListener('click', () => quantumEditor.redo());
             document.getElementById('btn-beautify').addEventListener('click', () => quantumEditor.beautifyCode());
+            document.getElementById('btn-render').addEventListener('click', renderQuantumHTML);
+            document.getElementById('btn-orchestrate').addEventListener('click', runQuantumAI);
+
+            // Quantum Actions
+            document.getElementById('btn-optimize').addEventListener('click', () => runQuantumAction('optimize'));
+            document.getElementById('btn-document').addEventListener('click', () => runQuantumAction('document'));
+            document.getElementById('btn-refactor').addEventListener('click', () => runQuantumAction('refactor'));
+
+            // Memory Management
+            document.getElementById('btn-clear-cache').addEventListener('click', () => {
+                memoryManager.clearAllCache().then(success => quantumNotify(success ? 'All caches cleared.' : 'Failed to clear caches.', success ? 'success' : 'error'));
+            });
+            document.getElementById('btn-optimize-memory').addEventListener('click', () => {
+                memoryManager.aggressiveCleanup();
+                quantumNotify('Aggressive memory cleanup initiated.', 'info');
+            });
+            document.getElementById('btn-export-session').addEventListener('click', () => {
+                memoryManager.exportSession().then(success => quantumNotify(success ? 'Session exported.' : 'Failed to export session.', success ? 'success' : 'error'));
+            });
+            
+            // Settings Listeners
+            const settingsToBind = [
+                { id: 'quantum-mode', key: 'quantumMode', type: 'checkbox' },
+                { id: 'hyperthreading', key: 'hyperthreading', type: 'checkbox' },
+                { id: 'multi-agent-mode', key: 'multiAgentMode', type: 'checkbox' },
+                { id: 'auto-save', key: 'autoSave', type: 'checkbox' },
+                { id: 'agent-count', key: 'agentCount', type: 'number' },
+                { id: 'max-rounds', key: 'maxRounds', type: 'number' },
+                { id: 'reasoning-depth', key: 'reasoningDepth', type: 'number' },
+            ];
+            settingsToBind.forEach(setting => {
+                const el = document.getElementById(setting.id);
+                el.addEventListener('change', (e) => {
+                    const value = setting.type === 'checkbox' ? e.target.checked : parseInt(e.target.value, 10);
+                    window.quantumState.settings[setting.key] = value;
+                    memoryManager.saveSettings();
+                    quantumNotify(`Setting '${setting.key}' updated.`, 'info');
+                });
+            });
+
 
             quantumNotify('Quantum Fractal AI Editor Initialized', 'success');
         } catch(e) {
@@ -1945,7 +2031,39 @@ function welcome() {
     });
     
     function runQuantumAI() {
-        enhancedOrchestrator.runOrchestration(document.getElementById('prompt-input').value, quantumEditor.getContent());
+        const prompt = document.getElementById('prompt-input').value;
+        if (!prompt.trim()) {
+            quantumNotify('Please enter a prompt.', 'warn');
+            return;
+        }
+        enhancedOrchestrator.runOrchestration(prompt, quantumEditor.getContent());
+    }
+
+    function runQuantumAction(actionType) {
+        const selectedCode = quantumEditor.getSelectedText();
+        if (!selectedCode || selectedCode.trim().length < 10) {
+            quantumNotify('Please select some code (or have substantial content) to run an action.', 'warn');
+            return;
+        }
+
+        let prompt = '';
+        switch(actionType) {
+            case 'optimize':
+                prompt = `Optimize the following code for maximum performance and efficiency:\n\n\`\`\`${quantumEditor.currentFileType}\n${selectedCode}\n\`\`\``;
+                break;
+            case 'document':
+                prompt = `Add detailed JSDoc-style documentation to the following code. Explain what each function does, its parameters, and what it returns:\n\n\`\`\`${quantumEditor.currentFileType}\n${selectedCode}\n\`\`\``;
+                break;
+            case 'refactor':
+                prompt = `Refactor the following code to improve readability, maintainability, and to follow modern best practices:\n\n\`\`\`${quantumEditor.currentFileType}\n${selectedCode}\n\`\`\``;
+                break;
+            default:
+                quantumNotify('Unknown quantum action.', 'error');
+                return;
+        }
+
+        document.getElementById('prompt-input').value = prompt;
+        runQuantumAI();
     }
     
     function quantumNotify(message, type = 'info') {
@@ -1998,7 +2116,11 @@ function welcome() {
     
     function renderQuantumHTML() {
         const blob = new Blob([quantumEditor.getContent()], {type: 'text/html'});
-        document.getElementById('preview-content').src = URL.createObjectURL(blob);
+        const previewContent = document.getElementById('preview-content');
+        if (previewContent.src.startsWith('blob:')) {
+            URL.revokeObjectURL(previewContent.src);
+        }
+        previewContent.src = URL.createObjectURL(blob);
         document.getElementById('preview-panel').style.display = 'flex';
     }
 
