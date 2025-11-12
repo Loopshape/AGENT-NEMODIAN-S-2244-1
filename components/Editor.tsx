@@ -676,20 +676,22 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
     // Memoize line numbers for rendering
     const renderedLineNumbers = useMemo(() => {
         const lines = [];
-        for (let i = startRenderedLine; i < endRenderedLine; i++) {
+        // Add an extra line number if content is empty or ends with a newline
+        const effectiveTotalLines = totalLines === 0 || content.endsWith('\n') ? totalLines + 1 : totalLines;
+        for (let i = startRenderedLine; i < Math.min(effectiveTotalLines, endRenderedLine); i++) {
             lines.push(i + 1);
         }
         return lines.map((num) => (
-            <div key={num}>{num}</div>
+            <div key={num} className="h-[1.5em] flex items-center justify-end">{num}</div> // Ensure fixed height and right align for each line number
         ));
-    }, [startRenderedLine, endRenderedLine]);
+    }, [startRenderedLine, endRenderedLine, totalLines, content]);
 
     return (
         <div className="flex-1 flex relative bg-[#22241e] overflow-hidden">
             <div
                 ref={linesRef}
                 className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-y-hidden overflow-x-hidden" // Changed overflow to hidden for vertical axis
-                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
+                style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace', flexShrink: 0 }} // Ensure font consistency, prevent shrinking
             >
                 {renderedLineNumbers}
             </div>
@@ -708,7 +710,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 />
                 {/* The pre element displays the highlighted (virtualized) content */}
                 <pre
-                    className="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-y-hidden overflow-x-hidden" // Changed overflow to hidden for vertical axis
+                    className="absolute inset-0 w-full h-full p-2 font-mono text-xs leading-normal pointer-events-none overflow-y-hidden whitespace-pre" // Changed overflow-x-hidden to whitespace-pre
                     style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                     aria-hidden="true"
                 >

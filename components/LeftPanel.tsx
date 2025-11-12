@@ -1,7 +1,7 @@
 
 
 import React, { useState, useRef, useEffect } from 'react';
-// FIX: Import `FolderNode` and `CodeSnippet` to resolve type errors in FileExplorer components and for new snippet props.
+// FIX: Import `FolderNode` to resolve type errors in FileExplorer components.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode, GroundingChunk, CodeSnippet } from '../types';
 import { typeToClassMap, tokenize, escapeHtml, highlightBasic } from '../utils/highlighter'; // Import shared highlighter utilities
 import { CodeSnippetsPanel } from './CodeSnippetsPanel'; // Import new CodeSnippetsPanel component
@@ -350,12 +350,11 @@ interface LeftPanelProps extends FileExplorerProps {
     onCodeReview: () => void;
     onFixCode: () => void;
     onGenerateCode: () => void; // New prop for AI Generate Code
-    // FIX: Add props related to code snippets.
-    codeSnippets: CodeSnippet[];
-    onAddSnippet: (title: string, code: string) => void;
-    onUpdateSnippet: (id: string, newTitle: string, newCode: string) => void;
-    onDeleteSnippet: (id: string) => void;
-    onInsertSnippet: (code: string) => void;
+    codeSnippets: CodeSnippet[]; // New prop for code snippets
+    onAddSnippet: (title: string, code: string) => void; // New prop for adding snippet
+    onUpdateSnippet: (id: string, newTitle: string, newCode: string) => void; // New prop for updating snippet
+    onDeleteSnippet: (id: string) => void; // New prop for deleting snippet
+    onInsertSnippet: (code: string) => void; // New prop for inserting snippet
 }
 
 /**

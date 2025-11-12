@@ -73,7 +73,7 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
             {suggestions.map((item, index) => (
                 <div
                     key={index}
-                    className={`px-3 py-1 cursor-pointer text-[#f0f0e0] hover:bg-[#4ac94a]/30 rounded ${
+                    className={`px-3 py-1.5 cursor-pointer text-[#f0f0e0] hover:bg-[#4ac94a]/30 rounded ${
                         index === selectedSuggestionIndex ? 'bg-[#4ac94a]/50' : ''
                     }`}
                     onClick={() => onSelect(item.suggestion)} // Pass only the suggestion string
@@ -81,9 +81,9 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
                     aria-selected={index === selectedSuggestionIndex}
                     id={`completion-option-${index}`}
                 >
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{item.suggestion}</div>
+                    <div className="font-bold" style={{ whiteSpace: 'pre-wrap' }}>{item.suggestion}</div>
                     {item.documentation && (
-                        <div className="text-xs text-slate-400 font-normal mt-0.5" style={{ fontSize: `${fontSize * 0.8}px`, whiteSpace: 'pre-wrap' }}>
+                        <div className="text-xs text-slate-400 font-normal mt-1 p-1 bg-black/10 rounded" style={{ fontSize: `${fontSize * 0.8}px`, whiteSpace: 'pre-wrap' }}>
                             {item.documentation}
                         </div>
                     )}

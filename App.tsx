@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type {
     Agent,
@@ -14,6 +15,7 @@ import type {
     FileSystemNode,
     // FIX: Import FileNode type for use in type assertion.
     FileNode,
+    CodeSnippet, // Import new CodeSnippet type
 } from './types';
 import { Header, StatusBar, LeftPanel, Footer, PreviewPanel, Terminal } from './components/ui';
 import { Editor } from './components/Editor';
@@ -218,8 +220,33 @@ const App: React.FC = () => {
     const [selectionStart, setSelectionStart] = useState(0);
     const [selectionEnd, setSelectionEnd] = useState(0);
 
+    // State for code snippets
+    const [codeSnippets, setCodeSnippets] = useState<CodeSnippet[]>([]);
+
     // Ref for the hidden file input
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Load snippets from localStorage on mount
+    useEffect(() => {
+        try {
+            const storedSnippets = localStorage.getItem('codeSnippets');
+            if (storedSnippets) {
+                setCodeSnippets(JSON.parse(storedSnippets));
+            }
+        } catch (error) {
+            console.error('Failed to load code snippets from localStorage:', error);
+        }
+    }, []);
+
+    // Save snippets to localStorage whenever they change
+    useEffect(() => {
+        try {
+            localStorage.setItem('codeSnippets', JSON.stringify(codeSnippets));
+        } catch (error) {
+            console.error('Failed to save code snippets to localStorage:', error);
+        }
+    }, [codeSnippets]);
+
 
     useEffect(() => {
         // Request geolocation permission on component mount
@@ -466,26 +493,35 @@ const App: React.FC = () => {
     );
 
     const handleSetContent = useCallback(
-        (newContent: string) => {
+        (newContent: string, insertionStart?: number, insertionEnd?: number) => {
+            let finalContent = newContent;
+            // If insertion points are provided, we are inserting/replacing within the current content.
+            if (insertionStart !== undefined && insertionEnd !== undefined) {
+                const currentContent = editorContent;
+                finalContent = currentContent.substring(0, insertionStart) + newContent + currentContent.substring(insertionEnd);
+            }
+
             // Update file system state
             if (activeFilePath) {
                 setFileSystem((prevFs) => {
                     const newFs = { ...prevFs };
                     const node = get(newFs, activeFilePath);
                     if (node && node.type === 'file') {
-                        return set(newFs, activeFilePath, { ...node, content: newContent });
+                        return set(newFs, activeFilePath, { ...node, content: finalContent });
                     }
                     return prevFs;
                 });
             }
 
+            // Only update if content actually changed
+            if (finalContent === editorContent) return; 
+            
             // Update editor state and history
-            if (newContent === editorContent) return; // Only update if content actually changed
-            const newHistory = [...history.slice(0, currentHistoryIndex + 1), newContent];
+            const newHistory = [...history.slice(0, currentHistoryIndex + 1), finalContent];
             setHistoryContent(newHistory);
             // FIX: Use setCurrentHistoryIndex to update the history index.
             setCurrentHistoryIndex(newHistory.length - 1);
-            setEditorContent(newContent);
+            setEditorContent(finalContent);
         },
         [activeFilePath, history, currentHistoryIndex, editorContent] // Added editorContent to dependencies
     );
@@ -900,6 +936,27 @@ const App: React.FC = () => {
         reader.readAsText(file, 'UTF-8'); // Explicitly read as UTF-8
     }, []); // Removed setHistoryContent, setCurrentHistoryIndex from dependencies as they are setters
 
+    // Code Snippet handlers
+    const handleAddSnippet = useCallback((title: string, code: string) => {
+        const newSnippet: CodeSnippet = { id: Date.now().toString(), title, code };
+        setCodeSnippets((prev) => [...prev, newSnippet]);
+    }, []);
+
+    const handleUpdateSnippet = useCallback((id: string, newTitle: string, newCode: string) => {
+        setCodeSnippets((prev) =>
+            prev.map((snippet) => (snippet.id === id ? { ...snippet, title: newTitle, code: newCode } : snippet))
+        );
+    }, []);
+
+    const handleDeleteSnippet = useCallback((id: string) => {
+        setCodeSnippets((prev) => prev.filter((snippet) => snippet.id !== id));
+    }, []);
+
+    const handleInsertSnippet = useCallback((code: string) => {
+        // Use current selectionStart and selectionEnd for insertion
+        handleSetContent(code, selectionStart, selectionEnd);
+    }, [handleSetContent, selectionStart, selectionEnd]);
+
 
     return (
         <div
@@ -954,6 +1011,11 @@ const App: React.FC = () => {
                     onCreateFolder={handleCreateFolder}
                     onRename={handleRename}
                     onDelete={handleDelete}
+                    codeSnippets={codeSnippets} // Pass code snippets state
+                    onAddSnippet={handleAddSnippet} // Pass handler for adding snippets
+                    onUpdateSnippet={handleUpdateSnippet} // Pass handler for updating snippets
+                    onDeleteSnippet={handleDeleteSnippet} // Pass handler for deleting snippets
+                    onInsertSnippet={handleInsertSnippet} // Pass handler for inserting snippets
                 />
                 <div className="flex flex-1 min-w-0">
                     <Editor

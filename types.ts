@@ -106,3 +106,10 @@ export interface FolderNode {
 }
 
 export type FileSystemNode = FileNode | FolderNode;
+
+// --- Code Snippet Type ---
+export interface CodeSnippet {
+    id: string; // Unique identifier
+    title: string;
+    code: string;
+}
