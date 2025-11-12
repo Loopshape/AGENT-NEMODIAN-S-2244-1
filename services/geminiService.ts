@@ -1,4 +1,5 @@
-/// <reference types="node" /> // Temporarily kept for TS checking in mixed environment, will be removed if no Node.js globals are used
+// FIX: Removed reference to "node" types and added a declaration for `process` to resolve type errors in environments where @types/node is not available.
+declare const process: any;
 
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Candidate, Persona, CodeReviewFinding, GroundingChunk } from '../types';
@@ -27,6 +28,7 @@ const COMPLETION_CACHE_EXPIRATION_MS = 5 * 60 * 1000; // 5 minutes
  * @param {boolean} withMaps - Whether maps grounding is enabled.
  * @param {number | null} latitude - Optional latitude for Maps grounding.
  * @param {number | null} longitude - Optional longitude for Maps grounding.
+ * @param {string | null} targetLanguage - Optional target language for code generation.
  * @returns {string} The cache key.
  */
 const getCacheKey = (
@@ -36,8 +38,9 @@ const getCacheKey = (
     withMaps: boolean,
     latitude: number | null,
     longitude: number | null,
+    targetLanguage: string | null,
 ): string => {
-    const keyData = { prompt, context, withSearch, withMaps, latitude, longitude };
+    const keyData = { prompt, context, withSearch, withMaps, latitude, longitude, targetLanguage };
     const jsonString = JSON.stringify(keyData);
     // Safely encode Unicode characters before Base64 encoding
     const encodedString = encodeURIComponent(jsonString).replace(/%([0-9A-F]{2})/g, (match, p1) =>
@@ -113,6 +116,7 @@ const saveToCache = (key: string, code: string, groundingChunks: GroundingChunk[
  * @param {boolean} withMaps - Whether to enable Google Maps grounding for the request.
  * @param {number} latitude - Optional latitude for Maps grounding.
  * @param {number} longitude - Optional longitude for Maps grounding.
+ * @param {string | null} targetLanguage - Optional target language for code generation. If provided, the AI is explicitly asked to generate code in this language.
  * @param {(update: { code: string; groundingChunks?: GroundingChunk[] }) => void} [onUpdate] - Optional callback for each stream update.
  * @returns {Promise<{ code: string; groundingChunks?: GroundingChunk[] }>} A promise that resolves with the final code and grounding chunks.
  */
@@ -123,12 +127,17 @@ export const generateWithThinkingStream = async (
     withMaps: boolean,
     latitude: number | null,
     longitude: number | null,
+    targetLanguage: string | null = null, // New parameter
     onUpdate?: (update: { code: string; groundingChunks?: GroundingChunk[] }) => void
 ): Promise<{ code: string; groundingChunks?: GroundingChunk[] }> => {
+    const languageInstruction = targetLanguage ? `Generate the code in ${targetLanguage}.` : '';
+
     const fullPrompt = `You are a world-class software architect and principal engineer, an expert in complex algorithms and system design. Your mission is to generate, refactor, or optimize code to solve sophisticated algorithmic challenges.
 Internally, you must deconstruct the problem, think step-by-step, consider various data structures, analyze time and space complexity, and anticipate edge cases to architect the most robust and performant solution.
 
 User Request: "${prompt}"
+
+${languageInstruction}
 
 Current Code Context:
 \`\`\`
@@ -166,7 +175,7 @@ Produce only the final, complete, and production-ready code block as your respon
 
     // Attempt to load from cache if grounding is used
     // Note: LocalStorage is not available in Node.js CLI environment, this will only work in browser.
-    const cacheKey = getCacheKey(prompt, context, withSearch, withMaps, latitude, longitude);
+    const cacheKey = getCacheKey(prompt, context, withSearch, withMaps, latitude, longitude, targetLanguage);
     if (typeof localStorage !== 'undefined' && (withSearch || withMaps) && cacheKey) {
         const cachedResult = loadFromCache(cacheKey);
         if (cachedResult) {

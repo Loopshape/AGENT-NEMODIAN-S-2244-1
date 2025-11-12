@@ -1,4 +1,7 @@
-/// <reference types="node" />
+// FIX: Removed reference to "node" types and added declarations for Node.js globals to resolve type errors.
+declare const process: any;
+declare const require: any;
+declare const module: any;
 
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Candidate, Persona, CodeReviewFinding, GroundingChunk } from '../types';

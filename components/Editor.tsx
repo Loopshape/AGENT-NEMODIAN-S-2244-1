@@ -403,42 +403,25 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         const matches: { start: number; end: number }[] = [];
         let searchContent = content;
         let query = findQuery;
-        let regexFlags = 'g';
 
         if (!caseSensitive) {
             searchContent = searchContent.toLowerCase();
             query = query.toLowerCase();
-            regexFlags += 'i';
         }
 
-        if (useRegex) {
-            try {
-                const regex = new RegExp(query, regexFlags);
-                let match;
-                while ((match = regex.exec(searchContent)) !== null) {
-                    matches.push({ start: match.index, end: match.index + match[0].length });
-                }
-            } catch (e) {
-                console.error("Invalid regex:", e);
-                setAllMatches([]);
-                setCurrentMatchIndex(-1);
-                return;
-            }
-        } else {
-            let lastIndex = 0;
-            while (lastIndex !== -1) {
-                const index = searchContent.indexOf(query, lastIndex);
-                if (index !== -1) {
-                    matches.push({ start: index, end: index + query.length });
-                    lastIndex = index + query.length;
-                } else {
-                    lastIndex = -1;
-                }
+        let lastIndex = 0;
+        while (lastIndex !== -1) {
+            const index = searchContent.indexOf(query, lastIndex);
+            if (index !== -1) {
+                matches.push({ start: index, end: index + query.length });
+                lastIndex = index + query.length;
+            } else {
+                lastIndex = -1;
             }
         }
         setAllMatches(matches);
         setCurrentMatchIndex(matches.length > 0 ? 0 : -1);
-    }, [content, findQuery, caseSensitive, useRegex]);
+    }, [content, findQuery, caseSensitive]);
 
     useEffect(() => {
         updateMatches();
@@ -704,10 +687,10 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
     }, [startRenderedLine, endRenderedLine, totalLines, content]);
 
     return (
-        <div className="flex-1 flex relative bg-theme-bg overflow-hidden">
+        <div className="flex-1 flex relative bg-[#22241e] overflow-hidden">
             <div
                 ref={linesRef}
-                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-y-hidden overflow-x-hidden border-r border-[#33363E]" // Changed overflow to hidden for vertical axis
+                className="text-right text-slate-600 select-none pr-3 pt-2 text-xs overflow-y-hidden overflow-x-hidden" // Changed overflow to hidden for vertical axis
                 style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, paddingTop: `${paddingTop}px`, paddingBottom: `${paddingBottom}px`, fontFamily: 'Fira Code, monospace', flexShrink: 0 }} // Ensure font consistency, prevent shrinking
             >
                 {renderedLineNumbers}
@@ -721,7 +704,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                     onScroll={handleScroll}
                     onKeyDown={handleKeyDown}
                     spellCheck="false"
-                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal z-10 overflow-auto custom-scrollbar" // Changed overflow to auto
+                    className="absolute inset-0 w-full h-full p-2 bg-transparent text-transparent caret-white outline-none resize-none font-mono text-xs leading-normal z-10 overflow-auto" // Changed overflow to auto
                     style={{ lineHeight: '1.5em', fontSize: `${fontSize}px`, fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                     aria-label="Code Editor"
                 />
@@ -748,17 +731,17 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                     />
                 )}
                 {isLoadingCompletion && (
-                    <div className="absolute z-50 text-xs text-gray-400 p-1 flex items-center bg-panel rounded shadow-md" style={{ top: completionPosition.top + 5, left: completionPosition.left }}>
+                    <div className="absolute z-50 text-xs text-gray-400 p-1 flex items-center" style={{ top: completionPosition.top + 5, left: completionPosition.left }}>
                         <div className="quantum-spinner w-3 h-3 inline-block mr-1.5 relative">
-                            <div className="absolute w-full h-full border-2 border-transparent border-t-agent-cognito rounded-full quantum-spinner::before"></div>
-                            <div className="absolute w-full h-full border-2 border-transparent border-b-agent-nexus rounded-full quantum-spinner::after"></div>
+                            <div className="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div>
+                            <div className="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div>
                         </div>
                         AI Thinking...
                     </div>
                 )}
 
                 {isFindReplaceOpen && (
-                    <div className="absolute top-2 right-2 bg-panel border border-agent-cognito rounded-lg shadow-xl p-3 flex flex-col gap-2 z-50">
+                    <div className="absolute top-2 right-2 bg-[#2e3026] border border-[#03DAC6] rounded shadow-lg p-2 flex flex-col gap-1.5 z-50">
                         <div className="flex items-center gap-2">
                             <input
                                 ref={findInputRef}
@@ -768,13 +751,13 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                                 onChange={(e) => setFindQuery(e.target.value)}
                                 // FIX: Use the dedicated keydown handler for input fields.
                                 onKeyDown={handleFindReplaceInputKeyDown}
-                                className="bg-status-bg text-white text-xs p-1.5 rounded border border-muted-text focus:outline-none focus:ring-1 focus:ring-agent-cognito w-36"
+                                className="bg-[#22241e] text-[#f0f0e0] text-xs p-1 rounded border border-[#999966] focus:outline-none focus:ring-1 focus:ring-[#03DAC6] w-32"
                                 style={{ fontFamily: 'Fira Code, monospace' }}
                             />
                             <button
                                 onClick={findPrevious}
                                 title="Previous Match (Shift+Enter)"
-                                className="bg-gray-700 hover:bg-gray-600 text-white text-xs p-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="bg-gray-700 hover:bg-gray-600 text-white text-xs p-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={allMatches.length === 0}
                             >
                                 ▲
@@ -782,7 +765,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                             <button
                                 onClick={findNext}
                                 title="Next Match (Enter)"
-                                className="bg-gray-700 hover:bg-gray-600 text-white text-xs p-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="bg-gray-700 hover:bg-gray-600 text-white text-xs p-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={allMatches.length === 0}
                             >
                                 ▼
@@ -790,7 +773,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                             <span className="text-xs text-gray-400">{currentMatchIndex + 1}/{allMatches.length}</span>
                             <button
                                 onClick={onFindReplaceToggle}
-                                className="text-gray-400 hover:text-red-500 text-lg ml-1 transition-colors"
+                                className="text-gray-400 hover:text-red-500 text-lg ml-1"
                                 title="Close"
                             >
                                 &times;
@@ -804,13 +787,13 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                                 onChange={(e) => setReplaceQuery(e.target.value)}
                                 // FIX: Use the dedicated keydown handler for input fields.
                                 onKeyDown={handleFindReplaceInputKeyDown}
-                                className="bg-status-bg text-white text-xs p-1.5 rounded border border-muted-text focus:outline-none focus:ring-1 focus:ring-agent-cognito w-36"
+                                className="bg-[#22241e] text-[#f0f0e0] text-xs p-1 rounded border border-[#999966] focus:outline-none focus:ring-1 focus:ring-[#03DAC6] w-32"
                                 style={{ fontFamily: 'Fira Code, monospace' }}
                             />
                             <button
                                 onClick={replaceCurrent}
                                 title="Replace Current Match"
-                                className="bg-agent-cognito hover:bg-emerald-400 text-black text-xs px-2 py-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="bg-[#03DAC6] hover:bg-[#03a99e] text-black text-xs px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={currentMatchIndex === -1 || !replaceQuery}
                             >
                                 Replace
@@ -818,7 +801,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                             <button
                                 onClick={replaceAll}
                                 title="Replace All Matches"
-                                className="bg-agent-nexus hover:bg-violet-500 text-white text-xs px-2 py-1.5 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="bg-[#BB86FC] hover:bg-[#a082f0] text-black text-xs px-2 py-1 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={allMatches.length === 0 || !replaceQuery}
                             >
                                 All
@@ -830,19 +813,21 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                                     type="checkbox"
                                     checked={caseSensitive}
                                     onChange={(e) => setCaseSensitive(e.target.checked)}
-                                    className="w-3.5 h-3.5 bg-status-bg border-muted-text rounded text-agent-cognito focus:ring-0 focus:ring-offset-0"
+                                    className="w-3 h-3 bg-[#22241e] border-[#999966] rounded text-[#03DAC6] focus:ring-0"
                                 />
                                 <span className="ml-1">Aa</span>
                             </label>
-                            <label className="flex items-center cursor-pointer">
+                            {/* Regex option currently deferred */}
+                            {/* <label className="flex items-center cursor-pointer opacity-50">
                                 <input
                                     type="checkbox"
                                     checked={useRegex}
                                     onChange={(e) => setUseRegex(e.target.checked)}
-                                    className="w-3.5 h-3.5 bg-status-bg border-muted-text rounded text-agent-cognito focus:ring-0 focus:ring-offset-0"
+                                    className="w-3 h-3 bg-[#22241e] border-[#999966] rounded text-[#03DAC6] focus:ring-0"
+                                    disabled
                                 />
                                 <span className="ml-1">.*</span>
-                            </label>
+                            </label> */}
                         </div>
                     </div>
                 )}
