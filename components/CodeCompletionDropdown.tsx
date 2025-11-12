@@ -58,14 +58,15 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
     return (
         <div
             ref={dropdownRef}
-            className="absolute bg-[#313328] border border-[#4ac94a] rounded-md shadow-lg max-h-60 overflow-y-auto z-50 p-1"
+            className="absolute bg-panel border border-accent rounded-md shadow-lg max-h-60 overflow-y-auto z-50 p-1 custom-scrollbar"
             style={{
                 top: `${position.top}px`,
                 left: `${position.left}px`,
                 fontSize: `${fontSize}px`,
-                minWidth: '200px',
+                minWidth: '250px',
                 pointerEvents: 'auto', // Ensure it's interactive
                 fontFamily: 'Fira Code, monospace', // Ensure font consistency
+                boxShadow: '0 4px 15px rgba(0,0,0,0.3), 0 0 10px rgba(6, 182, 212, 0.3)',
             }}
             role="listbox"
             aria-label="Code Completion Suggestions"
@@ -73,17 +74,17 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
             {suggestions.map((item, index) => (
                 <div
                     key={index}
-                    className={`px-3 py-1.5 cursor-pointer text-[#f0f0e0] hover:bg-[#4ac94a]/30 rounded ${
-                        index === selectedSuggestionIndex ? 'bg-[#4ac94a]/50' : ''
+                    className={`px-3 py-1.5 cursor-pointer text-white hover:bg-accent/30 rounded ${
+                        index === selectedSuggestionIndex ? 'bg-accent/50' : ''
                     }`}
                     onClick={() => onSelect(item.suggestion)} // Pass only the suggestion string
                     role="option"
                     aria-selected={index === selectedSuggestionIndex}
                     id={`completion-option-${index}`}
                 >
-                    <div className="font-bold" style={{ whiteSpace: 'pre-wrap' }}>{item.suggestion}</div>
+                    <div className="font-bold text-white/90" style={{ whiteSpace: 'pre-wrap' }}>{item.suggestion}</div>
                     {item.documentation && (
-                        <div className="text-xs text-slate-400 font-normal mt-1 p-1 bg-black/10 rounded" style={{ fontSize: `${fontSize * 0.8}px`, whiteSpace: 'pre-wrap' }}>
+                        <div className="text-xs text-slate-400 font-normal mt-1 p-1 bg-black/20 rounded" style={{ fontSize: `${fontSize * 0.8}px`, whiteSpace: 'pre-wrap' }}>
                             {item.documentation}
                         </div>
                     )}

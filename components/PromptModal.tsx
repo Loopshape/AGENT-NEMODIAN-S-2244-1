@@ -37,8 +37,8 @@ const ModeButton: React.FC<{ active: boolean; onClick: () => void; children: Rea
     <button
         type="button"
         onClick={onClick}
-        className={`px-3 py-1.5 text-sm rounded transition-colors ${
-            active ? 'bg-[#4ac94a] text-white font-bold' : 'bg-white/10 hover:bg-white/20'
+        className={`px-3.5 py-1.5 text-sm rounded-md transition-colors shadow-sm ${
+            active ? 'bg-accent text-white font-bold hover:bg-cyan-500' : 'bg-white/10 text-white/80 hover:bg-white/20'
         }`}
     >
         {children}
@@ -62,13 +62,13 @@ const AgentCard: React.FC<{ persona: Persona; selected: boolean; onClick: () => 
         type="button"
         onClick={onClick}
         title={persona.description}
-        className={`p-2 rounded border text-left transition-all duration-200 ${
+        className={`p-2 rounded-lg border text-left transition-all duration-200 shadow-sm ${
             selected
-                ? 'bg-[#4ac94a]/30 border-[#4ac94a] shadow-lg -translate-y-0.5'
+                ? 'bg-agent-nexus/30 border-agent-nexus shadow-lg -translate-y-0.5'
                 : 'bg-white/5 border-transparent hover:border-white/20'
         }`}
     >
-        <div className="font-semibold text-xs text-[#f0f0e0]">{persona.name}</div>
+        <div className="font-semibold text-xs text-white">{persona.name}</div>
     </button>
 );
 
@@ -139,15 +139,15 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
             onClick={onClose}
         >
             <div
-                className="w-full max-w-2xl bg-[#313328] border border-[#4ac94a] rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
+                className="w-full max-w-2xl bg-panel border border-accent rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}
             >
-                <header className="p-4 border-b border-gray-700">
-                    <h2 className="text-lg font-bold text-[#f0f0e0] animation-title-pulse">Invoke Quantum AI</h2>
+                <header className="p-4 border-b border-gray-700 bg-header-bg">
+                    <h2 className="text-lg font-bold text-white animation-title-pulse">Invoke Quantum AI</h2>
                 </header>
 
-                <div className="p-4 space-y-4 overflow-y-auto">
-                    <div className="flex gap-2 items-center">
+                <div className="p-4 space-y-4 overflow-y-auto custom-scrollbar">
+                    <div className="flex gap-3 items-center">
                         <ModeButton active={mode === 'ai'} onClick={() => setMode('ai')}>
                             Quantum AI
                         </ModeButton>
@@ -157,17 +157,17 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                     </div>
 
                     {mode === 'ai' && (
-                        <div className="pt-2 flex flex-col gap-2">
+                        <div className="pt-2 flex flex-col gap-3">
                             <label
                                 htmlFor="useSearch"
-                                className="flex items-center gap-3 text-sm text-[#f0f0e0] cursor-pointer"
+                                className="flex items-center gap-3 text-sm text-white cursor-pointer"
                             >
                                 <input
                                     type="checkbox"
                                     id="useSearch"
                                     checked={useSearch}
                                     onChange={(e) => setUseSearch(e.target.checked)}
-                                    className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                    className="w-4 h-4 bg-status-bg border-muted-text rounded text-accent focus:ring-2 focus:ring-offset-0 focus:ring-offset-panel focus:ring-accent"
                                 />
                                 <div>
                                     <span className="font-bold">Enable Search Grounding</span>
@@ -179,7 +179,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
 
                             <label
                                 htmlFor="useMaps"
-                                className={`flex items-center gap-3 text-sm text-[#f0f0e0] ${disableMapsCheckbox ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                className={`flex items-center gap-3 text-sm text-white ${disableMapsCheckbox ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                             >
                                 <input
                                     type="checkbox"
@@ -187,7 +187,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                     checked={useMaps}
                                     onChange={(e) => setUseMaps(e.target.checked)}
                                     disabled={disableMapsCheckbox}
-                                    className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                    className="w-4 h-4 bg-status-bg border-muted-text rounded text-accent focus:ring-2 focus:ring-offset-0 focus:ring-offset-panel focus:ring-accent"
                                 />
                                 <div>
                                     <span className="font-bold">Enable Maps Grounding</span>
@@ -209,7 +209,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                     )}
 
                     <div>
-                        <label htmlFor="prompt" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                        <label htmlFor="prompt" className="block text-sm font-bold text-white mb-2">
                             Your Request
                         </label>
                         <textarea
@@ -224,17 +224,17 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                     ? 'Describe the task for the agent collective...'
                                     : 'Describe what you want to generate, refactor, or optimize...'
                             }
-                            className="w-full h-24 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                            className="w-full h-24 p-2.5 bg-status-bg text-white border border-muted-text rounded-md focus:ring-2 focus:ring-accent focus:border-accent outline-none transition-colors"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
 
                     {mode === 'orchestrator' && (
                         <div className="space-y-2">
-                            <h3 className="text-sm font-bold text-[#f0f0e0]">
+                            <h3 className="text-sm font-bold text-white">
                                 Select Specialist Agents (Consensus Group)
                             </h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded bg-black/10 border border-white/10">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 rounded bg-black/10 border border-white/10 agent-list">
                                 {personas.map((p) => (
                                     <AgentCard
                                         key={p.name}
@@ -255,7 +255,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                     )}
 
                     <div>
-                        <label htmlFor="snippet" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                        <label htmlFor="snippet" className="block text-sm font-bold text-white mb-2">
                             Paste a Code Snippet (optional)
                         </label>
                         <div className="relative">
@@ -264,12 +264,12 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                                 value={snippet}
                                 onChange={(e) => setSnippet(e.target.value)}
                                 placeholder="Paste relevant code here..."
-                                className="w-full h-32 p-2 bg-[#22241e] text-transparent caret-white font-mono border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                                className="w-full h-32 p-2.5 bg-status-bg text-transparent caret-white font-mono border border-muted-text rounded-md focus:ring-2 focus:ring-accent focus:border-accent outline-none transition-colors"
                                 spellCheck="false"
                                 style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             />
                             <pre
-                                className="absolute top-0 left-0 w-full h-full p-2 font-mono pointer-events-none overflow-y-auto text-sm"
+                                className="absolute top-0 left-0 w-full h-full p-2.5 font-mono pointer-events-none overflow-y-auto text-sm"
                                 aria-hidden="true"
                                 style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             >
@@ -279,7 +279,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                     </div>
 
                     <div>
-                        <label htmlFor="context" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                        <label htmlFor="context" className="block text-sm font-bold text-white mb-2">
                             Additional Context (optional)
                         </label>
                         <textarea
@@ -287,23 +287,23 @@ export const PromptModal: React.FC<PromptModalProps> = ({ isOpen, onClose, onSub
                             value={context}
                             onChange={(e) => setContext(e.target.value)}
                             placeholder="Provide any extra information, constraints, or requirements..."
-                            className="w-full h-20 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#4ac94a] focus:border-[#4ac94a] outline-none transition-colors"
+                            className="w-full h-20 p-2.5 bg-status-bg text-white border border-muted-text rounded-md focus:ring-2 focus:ring-accent focus:border-accent outline-none transition-colors"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </div>
 
-                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2 bg-header-bg">
                     <button
                         onClick={onClose}
-                        className="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors"
+                        className="bg-error hover:bg-red-600 text-white font-bold px-4 py-2 rounded-md transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={isSubmitDisabled}
-                        className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2 rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        disabled={isSubmitDisabled || !prompt.trim()}
+                        className="bg-accent hover:bg-cyan-500 text-white font-bold px-8 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:cursor-not-allowed"
                     >
                         {isSubmitDisabled ? 'Select more agents' : 'Invoke AI'}
                     </button>

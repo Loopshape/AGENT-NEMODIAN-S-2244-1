@@ -4,30 +4,38 @@
  * Maps token types to Tailwind CSS classes for syntax highlighting.
  */
 export const typeToClassMap: Record<string, string> = {
-    comment: 'text-slate-500 italic',
-    string: 'text-lime-400',
-    number: 'text-amber-500 font-semibold',
-    keyword: 'text-pink-400 font-semibold',
-    type: 'text-sky-300',
-    function: 'text-[#4ac94a]',
-    bracket: 'text-purple-400 font-bold',
-    op: 'text-slate-400',
-    id: 'text-slate-300',
-    tag: 'text-pink-400 font-semibold',
-    'attr-name': 'text-sky-300',
-    'attr-value': 'text-lime-400',
-    color: 'text-fuchsia-400 font-semibold',
-    property: 'text-sky-300',
-    selector: 'text-amber-500',
-    key: 'text-sky-300',
-    boolean: 'text-pink-400',
-    null: 'text-purple-400',
-    meta: 'text-cyan-400',
-    variable: 'text-teal-300',
-    'at-rule': 'text-purple-400',
-    unknown: 'text-slate-300',
+    comment: 'sh-comment',
+    string: 'sh-string',
+    number: 'sh-number',
+    keyword: 'sh-keyword',
+    type: 'sh-type',
+    function: 'sh-function',
+    bracket: 'sh-bracket',
+    op: 'sh-op',
+    id: 'sh-id',
+    tag: 'sh-tag',
+    'attr-name': 'sh-property', /* Mapped to property for better consistency */
+    'attr-value': 'sh-string', /* Attribute values are often strings */
+    color: 'sh-keyword', /* Colors as keywords for distinction */
+    property: 'sh-property',
+    selector: 'sh-css-selector',
+    key: 'sh-key',
+    boolean: 'sh-keyword', /* Booleans as keywords */
+    null: 'sh-keyword', /* Null as keyword */
+    meta: 'sh-type', /* Meta information like doctype or import statements */
+    variable: 'sh-id', /* Variables are identifiers */
+    'at-rule': 'sh-keyword', /* CSS @rules as keywords */
+    unknown: 'sh-unknown',
     error: 'bg-red-500/20 underline decoration-red-400 decoration-wavy',
-    whitespace: 'text-transparent', // Make whitespace visible only for rendering, not coloring
+    whitespace: 'sh-ws',
+    regex: 'sh-regex', /* New regex type for JS regex literals */
+    'html-entity': 'sh-html-entity', /* For HTML entities like &nbsp; */
+    'css-selector': 'sh-css-selector',
+    'css-property': 'sh-css-property',
+    'css-value': 'sh-css-value',
+    'jsx-tag': 'sh-jsx-tag',
+    'jsx-attribute': 'sh-jsx-attribute',
+    'template-string': 'sh-template-string',
 };
 
 /**
@@ -41,12 +49,13 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'error', regex: /^"[^"\n]*$/, errorMessage: 'Unterminated string literal.' },
         { type: 'error', regex: /^'[^'\n]*$/, errorMessage: 'Unterminated string literal.' },
         { type: 'comment', regex: /^(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/ },
-        { type: 'string', regex: /^`(?:\\[\s\S]|[^`])*`|^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
-        { type: 'string', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, // Regex
+        { type: 'template-string', regex: /^`(?:\\[\s\S]|[^`])*`/ }, /* Specific for template literals */
+        { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
+        { type: 'regex', regex: /^\/(?!\*)(?:[^\r\n\[/\\]|\\.|\[(?:[^\r\n\]\\]|\\.)*\])+\/[gimsuy]*/ }, // Regex
         { type: 'number', regex: /^\b(?:0x[a-fA-F0-9]+|[0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)\b/i },
         {
             type: 'keyword',
-            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set)\b/,
+            regex: /^\b(?:if|else|for|while|function|return|const|let|var|class|new|in|of|switch|case|break|continue|try|catch|throw|async|await|export|import|from|default|extends|super|instanceof|typeof|void|delete|yield|debugger|with|get|set|static)\b/,
         },
         { type: 'boolean', regex: /^\b(true|false)\b/ },
         { type: 'null', regex: /^\b(null|undefined)\b/ },
@@ -60,12 +69,13 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'error', regex: /^<[\w\d\-]+(?:(?:"[^"]*"|'[^']*'|[^>])+)?$/, errorMessage: 'Unclosed HTML tag.' },
         { type: 'meta', regex: /^<!DOCTYPE[\s\S]*?>/i },
         { type: 'comment', regex: /^<!--[\s\S]*?-->/ },
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ },
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-:]+/ }, /* Unified tag regex for HTML/XML */
+        { type: 'attr-name', regex: /^\s+[\w\d\-:]+(?==)/ }, /* Unified attr-name regex */
         { type: 'op', regex: /^=/ },
         { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'tag', regex: /^>/ },
-        { type: 'text', regex: /^[^<]+/ },
+        { type: 'html-entity', regex: /^&[a-zA-Z0-9#]+;/ }, /* HTML entities */
+        { type: 'text', regex: /^[^<>&]+/ }, /* Text content */
         { type: 'whitespace', regex: /^\s+/ },
     ],
     css: [
@@ -76,7 +86,7 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'at-rule', regex: /^@[\w\-]+/ },
         { type: 'string', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'property', regex: /^[a-zA-Z\-]+(?=\s*:)/ },
-        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ },
+        { type: 'selector', regex: /^(?:[.#]?[a-zA-Z0-9\-_*]+|\[[^\]]+\]|:{1,2}[a-zA-Z\-]+(?:\([^\)]+\))?)/ }, /* Improved selector */
         { type: 'function', regex: /^\b(?:url|var|calc|rgb|rgba|hsl|hsla)(?=\()/ },
         { type: 'color', regex: /^#(?:[0-9a-fA-F]{3,8})\b/ },
         { type: 'number', regex: /^\b-?\d+(\.\d+)?(px|em|rem|%|vw|vh|s|deg|fr|ms)?\b/i },
@@ -98,7 +108,8 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'op', regex: /^=/ },
         { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'tag', regex: /^\/?>/ },
-        { type: 'text', regex: /^[^<]+/ },
+        { type: 'html-entity', regex: /^&[a-zA-Z0-9#]+;/ }, /* XML entities */
+        { type: 'text', regex: /^[^<>&]+/ },
         { type: 'whitespace', regex: /^\s+/ },
     ],
     php: [
@@ -117,8 +128,8 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'op', regex: /^->|=>|==|===|!=|!==|<=|>=|[-+*\/%<>&|^~?:.,;]/ },
         { type: 'bracket', regex: /^[\[\]{}()]/ },
         { type: 'comment', regex: /^<!--[\s\S]*?-->/ }, // HTML comments within PHP
-        { type: 'tag', regex: /^<\/?[\w\d\-]+/ }, // HTML tags within PHP
-        { type: 'attr-name', regex: /^\s+[\w\d\-]+(?==)/ },
+        { type: 'tag', regex: /^<\/?[\w\d\-:]+/ }, // HTML tags within PHP (using XML tag regex)
+        { type: 'attr-name', regex: /^\s+[\w\d\-:]+(?==)/ },
         { type: 'op', regex: /^=/ },
         { type: 'attr-value', regex: /^"(?:\\.|[^"])*"|^'(?:\\.|[^'])*'/ },
         { type: 'tag', regex: /^>/ },
@@ -188,6 +199,9 @@ export const languageRules: Record<string, { type: string; regex: RegExp; errorM
         { type: 'bracket', regex: /^[()]/ },
         { type: 'whitespace', regex: /^\s+/ },
     ],
+    plaintext: [
+        { type: 'text', regex: /^[\s\S]+/ },
+    ],
 };
 
 /**
@@ -206,10 +220,8 @@ export interface Token {
  * @returns {Token[]} An array of tokens.
  */
 export const tokenize = (text: string, language: string): Token[] => {
-    const rules = languageRules[language] || [];
-    if (rules.length === 0) {
-        return [{ type: 'unknown', value: text }];
-    }
+    const rules = languageRules[language] || languageRules['plaintext']; // Default to plaintext if rules not found
+    
 
     const tokens: Token[] = [];
     let position = 0;

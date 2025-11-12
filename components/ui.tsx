@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 // FIX: Import `FolderNode` and `CodeSnippet` to resolve type errors in FileExplorer components and for new snippet props.
 import type { OrchestratorSettings, EditorStats, TerminalLine, FileSystemNode, FolderNode, GroundingChunk, CodeSnippet } from '../types';
@@ -36,67 +34,67 @@ interface HeaderProps {
  * @returns {React.ReactElement} The rendered header component.
  */
 export const Header: React.FC<HeaderProps> = (props) => (
-    <header className="bg-[#2e3026] border-b border-[#22241e] flex items-center justify-between px-3 py-1.5 relative overflow-hidden quantum-scan">
-        <div className="flex gap-3 items-center z-10">
-            <button onClick={props.onToggleLeftPanel} className="bg-[#a03333] hover:bg-[#3366a0] text-sm px-2 py-1.5 rounded transition-colors">
+    <header className="bg-header-bg border-b border-[#33363E] flex items-center justify-between px-4 py-2 relative overflow-hidden quantum-scan shadow-md">
+        <div className="flex gap-4 items-center z-10">
+            <button onClick={props.onToggleLeftPanel} className="bg-gray-700 hover:bg-hover-blue text-white text-base px-3 py-1.5 rounded-md transition-colors shadow-sm">
                 ☰
             </button>
-            <div className="font-extrabold quantum-pulse">Nemodian 2244-1 :: Quantum Fractal AI</div>
+            <div className="font-extrabold text-lg text-white quantum-pulse">Nemodian 2244-1 :: Quantum Fractal AI</div>
         </div>
-        <div className="flex gap-2 items-center z-10">
+        <div className="flex gap-2.5 items-center z-10">
             <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-[#4ac94a]"></div>
-                <div className="text-xs text-[#cfcfbd]">Quantum AI: Ready</div>
+                <div className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse-slow shadow-lg-accent"></div>
+                <div className="text-xs text-muted-text">Quantum AI: Ready</div>
             </div>
             <button
                 onClick={props.onTogglePreview}
-                className={`text-xs px-2 py-1.5 rounded transition-colors ${
+                className={`text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm ${
                     props.isPreviewing
-                        ? 'bg-yellow-600 text-white hover:bg-yellow-700 ring-2 ring-offset-2 ring-offset-[#2e3026] ring-yellow-400'
-                        : 'bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400'
+                        ? 'bg-warn-bg text-black hover:bg-amber-400 ring-2 ring-offset-2 ring-offset-header-bg ring-warn-bg'
+                        : 'bg-warn-bg text-black hover:bg-amber-400'
                 }`}
             >
                 {props.isPreviewing ? 'Close Preview' : 'Live Preview'}
             </button>
             <button
                 onClick={props.onLoadScript} // Use new prop
-                className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-gray-700 hover:bg-hover-blue text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
                 Load Script
             </button>
             <button
                 onClick={props.onSaveFile} // New button for saving the current file
-                className="bg-[#60A5FA] hover:bg-[#3B82F6] text-white text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
                 Save
             </button>
             <button
                 onClick={props.onGenerateCode} // New button for AI Generate Code
-                className="bg-[#BB86FC] hover:bg-[#a082f0] text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-agent-nexus hover:bg-violet-500 text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
-                AI Generate Code
+                AI Generate
             </button>
             <button
                 onClick={props.onFixCode}
-                className="bg-[#673AB7] hover:bg-[#855CCB] text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
-                AI Fix Code
+                AI Fix
             </button>
             <button
                 onClick={props.onRunAI}
-                className="bg-[#5bc0de] border-[#5bc0de] hover:bg-cyan-400 text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-info-bg hover:bg-sky-400 text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
                 Quantum AI
             </button>
             <button
                 onClick={props.onRunOrchestrator}
-                className="bg-[#4ac94a] border-[#4ac94a] hover:bg-green-400 text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-success hover:bg-green-400 text-white text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
                 Orchestrator
             </button>
             <button
                 onClick={props.onFindReplaceToggle} // New button for Find/Replace
-                className="bg-[#03DAC6] hover:bg-[#03a99e] text-xs px-2 py-1.5 rounded transition-colors"
+                className="bg-agent-cognito hover:bg-emerald-400 text-black text-xs px-2.5 py-1.5 rounded-md transition-colors shadow-sm"
             >
                 Find/Replace
             </button>
@@ -120,19 +118,19 @@ interface StatusBarProps {
 export const StatusBar: React.FC<StatusBarProps> = ({ fileName, stats }) => (
     <div
         id="status-bar"
-        className="bg-[#22241e] flex justify-between items-center px-3 text-xs h-[1.5em] relative"
+        className="bg-status-bg flex justify-between items-center px-4 text-xs h-[1.5em] relative border-t border-[#33363E] text-muted-text"
     >
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-30">
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-15">
             {[...Array(5)].map((_, i) => (
                 <div
                     key={i}
-                    className="quantum-thread absolute w-px h-full bg-gradient-to-b from-transparent via-[#BB86FC] to-transparent"
+                    className="quantum-thread absolute w-[1.5px] h-full bg-gradient-to-b from-transparent via-agent-nexus to-transparent"
                     style={{ left: `${20 + i * 15}%`, animationDelay: `${i * 0.3}s` }}
                 ></div>
             ))}
         </div>
-        <div>{fileName || 'No File Open'}</div>
-        <div>{`Cursor: ${stats.cursor} | Lines: ${stats.lines} | Chars: ${stats.chars} | History: ${stats.history}`}</div>
+        <div className="z-10">{fileName || 'No File Open'}</div>
+        <div className="z-10">{`Cursor: ${stats.cursor} | Lines: ${stats.lines} | Chars: ${stats.chars} | History: ${stats.history}`}</div>
     </div>
 );
 
@@ -150,7 +148,7 @@ interface FileExplorerProps {
 
 const FileExplorer: React.FC<FileExplorerProps> = (props) => {
     return (
-        <div className="text-xs text-[#999966] font-mono">
+        <div className="text-xs text-muted-text font-mono">
             <FileTree {...props} node={props.fileSystem} path="" depth={0} />
         </div>
     );
@@ -221,7 +219,7 @@ const FileTreeItem: React.FC<
                 e.stopPropagation();
                 onClick();
             }}
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/20 text-gray-400 hover:text-white"
+            className="w-5 h-5 flex items-center justify-center rounded-md hover:bg-white/20 text-gray-400 hover:text-white transition-colors"
         >
             {children}
         </button>
@@ -231,16 +229,16 @@ const FileTreeItem: React.FC<
         <div>
             <div
                 onClick={() => (isFolder ? setIsExpanded(!isExpanded) : onOpenFile(path))}
-                className={`flex items-center justify-between group p-1 rounded cursor-pointer ${
-                    isActive ? 'bg-[#4ac94a]/30' : 'hover:bg-white/10'
+                className={`flex items-center justify-between group p-1.5 rounded-md cursor-pointer ${
+                    isActive ? 'bg-accent/30 text-white' : 'hover:bg-white/10'
                 }`}
-                style={{ paddingLeft: `${depth * 12 + 4}px` }}
+                style={{ paddingLeft: `${depth * 14 + 6}px` }}
             >
                 <div className="flex items-center gap-1.5 truncate">
                     {isFolder ? (
                         <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     ) : (
-                        <svg className="w-3 h-3 text-[#999966]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <svg className="w-3 h-3 text-muted-text" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                         </svg>
                     )}
@@ -253,7 +251,7 @@ const FileTreeItem: React.FC<
                             onBlur={handleRenameSubmit}
                             onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit()}
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-[#22241e] text-white p-0 m-0 border border-[#999966] rounded h-5 text-xs w-full"
+                            className="bg-panel text-white p-0.5 border border-muted-text rounded h-6 text-xs w-full focus:outline-none focus:ring-1 focus:ring-accent"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     ) : (
@@ -323,10 +321,10 @@ const Accordion: React.FC<{ title: string; children: React.ReactNode; defaultOpe
     const [isOpen, setIsOpen] = useState(defaultOpen);
 
     return (
-        <div className="text-xs text-[#999966] border-b border-[#22241e]">
+        <div className="text-xs text-muted-text border-b border-[#22241e]">
             <button
                 onClick={() => setIsOpen((prev) => !prev)}
-                className="font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5"
+                className="font-bold w-full text-left flex justify-between items-center p-2 rounded hover:bg-white/5 transition-colors"
             >
                 <span>{title}</span>
                 <span className={`transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
@@ -411,8 +409,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
 
     return (
         <aside
-            className={`bg-[#313328] border-r border-[#22241e] flex flex-col w-60 transition-all duration-300 overflow-y-auto ${
-                isOpen ? 'ml-0' : '-ml-60'
+            className={`bg-panel border-r border-[#33363E] flex flex-col w-70 transition-all duration-300 overflow-y-auto ${
+                isOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
         >
             <Accordion title="File Explorer" defaultOpen>
@@ -432,8 +430,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                     <button
                         onClick={onUndo}
                         disabled={!canUndo}
-                        className={`bg-[#a03333] text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
-                            canUndo ? 'hover:bg-[#3366a0]' : 'opacity-50 cursor-not-allowed'
+                        className={`bg-gray-700 text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
+                            canUndo ? 'hover:bg-hover-blue' : 'opacity-50 cursor-not-allowed'
                         }`}
                     >
                         UNDO
@@ -441,63 +439,63 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                     <button
                         onClick={onRedo}
                         disabled={!canRedo}
-                        className={`bg-[#a03333] text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
-                            canRedo ? 'hover:bg-[#3366a0]' : 'opacity-50 cursor-not-allowed'
+                        className={`bg-gray-700 text-white text-xs w-full text-left p-1.5 rounded transition-colors ${
+                            canRedo ? 'hover:bg-hover-blue' : 'opacity-50 cursor-not-allowed'
                         }`}
                     >
                         REDO
                     </button>
                     <button
                         onClick={() => onQuickAction('beautify')} // Beautify button
-                        className="bg-[#2196F3] hover:bg-blue-600 text-white text-xs w-full text-left mt-2 p-1.5 rounded"
+                        className="bg-info hover:bg-sky-600 text-white text-xs w-full text-left mt-2 p-1.5 rounded"
                     >
                         Beautify Code
                     </button>
                     <button
                         onClick={onGenerateCode} // New button for AI Generate Code
-                        className="bg-[#BB86FC] hover:bg-[#a082f0] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-agent-nexus hover:bg-violet-500 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         AI Generate Code
                     </button>
                     <button
                         onClick={onFixCode}
-                        className="bg-[#673AB7] hover:bg-[#855CCB] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         AI Fix Code
                     </button>
                     <button
                         onClick={() => onQuickAction('optimize')}
-                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-gray-700 hover:bg-hover-blue text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Quantum Optimize
                     </button>
                     <button
                         onClick={() => onQuickAction('document')}
-                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-gray-700 hover:bg-hover-blue text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Fractal Document
                     </button>
                     <button
                         onClick={() => onQuickAction('refactor')}
-                        className="bg-[#a03333] hover:bg-[#3366a0] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-gray-700 hover:bg-hover-blue text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Hyper Refactor
                     </button>
                     <button
                         onClick={onCodeReview}
-                        className="bg-[#a033a0] hover:bg-[#6c236c] text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         AI Code Review
                     </button>
                     <button
                         onClick={onAnalyzeSelection} // New button for Analyze Selection
-                        className="bg-[#5bc0de] hover:bg-cyan-400 text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-info-bg hover:bg-sky-400 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Analyze Selection
                     </button>
                     <button
                         onClick={onRunOrchestrator}
-                        className="bg-[#4ac94a] hover:bg-green-400 text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-success hover:bg-green-400 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Multi-Agent Consensus
                     </button>
@@ -508,13 +506,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                 <div className="flex flex-col gap-1 pt-1">
                     <button
                         onClick={onSaveDraft}
-                        className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-warn-bg hover:bg-amber-400 text-black text-xs w-full text-left p-1.5 rounded"
                     >
                         Save Draft
                     </button>
                     <button
                         onClick={onLoadDraft}
-                        className="bg-[#f0ad4e] hover:bg-yellow-400 text-white text-xs w-full text-left p-1.5 rounded"
+                        className="bg-warn-bg hover:bg-amber-400 text-black text-xs w-full text-left p-1.5 rounded"
                     >
                         Load Draft
                     </button>
@@ -534,7 +532,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
 
             <Accordion title="Orchestrator Settings">
                 <div className="pt-1">
-                    <div className="mt-1">
+                    <div className="mt-1 flex items-center justify-between">
                         <label htmlFor="agent-count">Agent Count:</label>
                         <input
                             type="number"
@@ -545,11 +543,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                             onChange={(e) =>
                                 onSettingsChange({ ...settings, agentCount: parseInt(e.target.value) })
                             }
-                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            className="w-16 ml-2 bg-status-bg text-white border border-muted-text p-0.5 rounded focus:outline-none focus:ring-1 focus:ring-accent"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
-                    <div className="mt-1">
+                    <div className="mt-1 flex items-center justify-between">
                         <label htmlFor="max-rounds">Max Rounds:</label>
                         <input
                             type="number"
@@ -560,7 +558,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                             onChange={(e) =>
                                 onSettingsChange({ ...settings, maxRounds: parseInt(e.target.value) })
                             }
-                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            className="w-16 ml-2 bg-status-bg text-white border border-muted-text p-0.5 rounded focus:outline-none focus:ring-1 focus:ring-accent"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
@@ -578,7 +576,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                             max="24"
                             value={editorFontSize}
                             onChange={(e) => onFontSizeChange(parseInt(e.target.value, 10))}
-                            className="w-16 ml-2 bg-[#22241e] text-white border border-[#999966] p-0.5 rounded"
+                            className="w-16 ml-2 bg-status-bg text-white border border-muted-text p-0.5 rounded focus:outline-none focus:ring-1 focus:ring-accent"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
@@ -586,7 +584,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
             </Accordion>
 
             <Accordion title="Editor History">
-                <div className="max-h-48 overflow-y-auto pr-1 border-l-2 border-gray-700 pl-2">
+                <div className="max-h-48 overflow-y-auto pr-1 border-l-2 border-gray-700 pl-2 history-list">
                     {history
                         .map((content, index) => (
                             <button
@@ -595,8 +593,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                                 title={content}
                                 className={`w-full text-left p-1 rounded text-xs mt-1 truncate transition-colors ${
                                     historyIndex === index
-                                        ? 'bg-[#4ac94a]/30 text-white font-semibold'
-                                        : 'bg-[#22241e]/50 hover:bg-[#a03333]'
+                                        ? 'bg-accent/30 text-white font-semibold'
+                                        : 'bg-white/5 hover:bg-white/10'
                                 }`}
                                 style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                             >
@@ -625,18 +623,28 @@ interface FooterProps {
  * @returns {React.ReactElement} The rendered footer component.
  */
 export const Footer: React.FC<FooterProps> = (props) => (
-    <footer className="flex items-center justify-between px-3 py-1.5 bg-[#2e3026] border-t border-[#22241e]">
+    <footer className="flex items-center justify-between px-4 py-2 bg-header-bg border-t border-[#33363E] shadow-md">
         <div />
         <button
             onClick={props.onInvoke}
-            className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2.5 rounded transition-colors disabled:bg-gray-500 text-lg quantum-pulse"
+            className="bg-accent hover:bg-cyan-500 text-white font-bold px-8 py-2.5 rounded-md transition-colors disabled:bg-gray-700 text-lg quantum-pulse"
             disabled={props.isLoading}
         >
-            {props.isLoading ? 'Processing...' : 'Invoke Quantum AI...'}
+            {props.isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                    <div className="quantum-spinner w-5 h-5 relative">
+                        <div className="absolute w-full h-full border-2 border-transparent border-t-agent-cognito rounded-full quantum-spinner::before"></div>
+                        <div className="absolute w-full h-full border-2 border-transparent border-b-agent-nexus rounded-full quantum-spinner::after"></div>
+                    </div>
+                    Processing...
+                </span>
+            ) : (
+                'Invoke Quantum AI...'
+            )}
         </button>
         <button
             onClick={props.onToggleTerminal}
-            className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded transition-colors"
+            className="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded-md transition-colors shadow-sm"
         >
             Terminal
         </button>
@@ -742,11 +750,11 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
                 height: `${size.height}px`,
                 zIndex: 100,
             }}
-            className="flex flex-col bg-white border-2 border-[#4ac94a] shadow-2xl rounded-lg overflow-hidden"
+            className="flex flex-col bg-white border-2 border-accent shadow-2xl rounded-lg overflow-hidden"
         >
             <div
                 onMouseDown={handleDragStart}
-                className="bg-[#2e3026] text-[#f0f0e0] p-2 flex justify-between items-center border-b border-[#4ac94a] flex-shrink-0 cursor-move"
+                className="bg-header-bg text-white p-2 flex justify-between items-center border-b border-accent flex-shrink-0 cursor-move"
             >
                 <span className="font-bold">Live Preview</span>
                 <button
@@ -887,18 +895,18 @@ export const Terminal: React.FC<TerminalProps> = ({ isOpen, onClose, history, on
 
     return (
         <div
-            className={`fixed bottom-0 left-0 right-0 h-1/2 bg-[#22241e]/95 backdrop-blur-md border-t-2 border-[#4ac94a] shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+            className={`fixed bottom-0 left-0 right-0 h-1/2 bg-status-bg/95 backdrop-blur-md border-t-2 border-accent shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
                 isOpen ? 'translate-y-0' : 'translate-y-full'
             }`}
         >
             <div className="flex flex-col h-full">
-                <div className="p-2 flex justify-between items-center border-b border-gray-700 flex-shrink-0">
-                    <h3 className="font-bold text-sm text-[#f0f0e0]">Quantum Terminal</h3>
-                    <button onClick={onClose} className="text-xl text-gray-500 hover:text-white">
+                <div className="p-3 flex justify-between items-center border-b border-gray-700 flex-shrink-0">
+                    <h3 className="font-bold text-sm text-white">Quantum Terminal</h3>
+                    <button onClick={onClose} className="text-xl text-gray-500 hover:text-white transition-colors">
                         &times;
                     </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 text-sm font-mono" onClick={() => inputRef.current?.focus()}>
+                <div className="flex-1 overflow-y-auto p-3 text-sm font-mono terminal-history-container" onClick={() => inputRef.current?.focus()}>
                     {history.map((line, i) => (
                         <div key={i} className="flex gap-2">
                             <span className="text-gray-600 select-none">
@@ -915,7 +923,7 @@ export const Terminal: React.FC<TerminalProps> = ({ isOpen, onClose, history, on
                     ))}
                     <div ref={endOfHistoryRef} />
                 </div>
-                <form onSubmit={handleSubmit} className="p-2 border-t border-gray-700 flex-shrink-0">
+                <form onSubmit={handleSubmit} className="p-3 border-t border-gray-700 flex-shrink-0">
                     <div className="flex items-center gap-2">
                         <span className="text-cyan-400 font-mono text-sm select-none">QF&gt;</span>
                         <input

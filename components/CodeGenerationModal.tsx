@@ -55,25 +55,25 @@ export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
             onClick={onClose}
         >
             <div
-                className="w-full max-w-xl bg-[#313328] border border-[#BB86FC] rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
+                className="w-full max-w-xl bg-panel border border-agent-nexus rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}
             >
-                <header className="p-4 border-b border-gray-700">
-                    <h2 className="text-lg font-bold text-[#f0f0e0] animation-title-pulse">AI Code Generation</h2>
+                <header className="p-4 border-b border-gray-700 bg-header-bg">
+                    <h2 className="text-lg font-bold text-white animation-title-pulse">AI Code Generation</h2>
                 </header>
 
-                <div className="p-4 space-y-4 overflow-y-auto">
-                    <div className="pt-2 flex flex-col gap-2">
+                <div className="p-4 space-y-4 overflow-y-auto custom-scrollbar">
+                    <div className="pt-2 flex flex-col gap-3">
                         <label
                             htmlFor="useSearch"
-                            className="flex items-center gap-3 text-sm text-[#f0f0e0] cursor-pointer"
+                            className="flex items-center gap-3 text-sm text-white cursor-pointer"
                         >
                             <input
                                 type="checkbox"
                                 id="useSearch"
                                 checked={useSearch}
                                 onChange={(e) => setUseSearch(e.target.checked)}
-                                className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                className="w-4 h-4 bg-status-bg border-muted-text rounded text-accent focus:ring-2 focus:ring-offset-0 focus:ring-offset-panel focus:ring-accent"
                             />
                             <div>
                                 <span className="font-bold">Enable Search Grounding</span>
@@ -85,7 +85,7 @@ export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
 
                         <label
                             htmlFor="useMaps"
-                            className={`flex items-center gap-3 text-sm text-[#f0f0e0] ${disableMapsCheckbox ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            className={`flex items-center gap-3 text-sm text-white ${disableMapsCheckbox ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                         >
                             <input
                                 type="checkbox"
@@ -93,7 +93,7 @@ export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
                                 checked={useMaps}
                                 onChange={(e) => setUseMaps(e.target.checked)}
                                 disabled={disableMapsCheckbox}
-                                className="w-4 h-4 bg-[#22241e] border-[#999966] rounded text-[#4ac94a] focus:ring-2 focus:ring-offset-0 focus:ring-offset-[#313328] focus:ring-[#4ac94a]"
+                                className="w-4 h-4 bg-status-bg border-muted-text rounded text-accent focus:ring-2 focus:ring-offset-0 focus:ring-offset-panel focus:ring-accent"
                             />
                             <div>
                                 <span className="font-bold">Enable Maps Grounding</span>
@@ -114,7 +114,7 @@ export const CodeGenerationModal: React.FC<CodeGenerationModalProps> = ({
                     </div>
 
                     <div>
-                        <label htmlFor="prompt" className="block text-sm font-bold text-[#f0f0e0] mb-2">
+                        <label htmlFor="prompt" className="block text-sm font-bold text-white mb-2">
                             Describe what you want to generate:
                         </label>
                         <textarea
@@ -128,23 +128,23 @@ Generate a React component for a data table with the following features:
 - Pagination
 - Search functionality
 - Sortable columns for 'name' and 'age' fields.`}
-                            className="w-full h-32 p-2 bg-[#22241e] text-[#f0f0e0] border border-[#999966] rounded focus:ring-2 focus:ring-[#BB86FC] focus:border-[#BB86FC] outline-none transition-colors"
+                            className="w-full h-32 p-2.5 bg-status-bg text-white border border-muted-text rounded-md focus:ring-2 focus:ring-agent-nexus focus:border-agent-nexus outline-none transition-colors"
                             style={{ fontFamily: 'Fira Code, monospace' }} // Ensure font consistency
                         />
                     </div>
                 </div>
 
-                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2 bg-header-bg">
                     <button
                         onClick={onClose}
-                        className="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors"
+                        className="bg-error hover:bg-red-600 text-white font-bold px-4 py-2 rounded-md transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={!prompt.trim()}
-                        className="bg-[#BB86FC] hover:bg-[#a082f0] text-white font-bold px-8 py-2 rounded transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        className="bg-agent-nexus hover:bg-violet-500 text-white font-bold px-8 py-2 rounded-md transition-colors disabled:bg-gray-700 disabled:cursor-not-allowed"
                     >
                         Generate Code
                     </button>

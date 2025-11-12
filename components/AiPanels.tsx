@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import type { AiState, Agent, Consensus, GroundingChunk, CodeReviewFinding } from '../types';
 import { highlightBasic, escapeHtml } from '../utils/highlighter'; // Import shared highlighter utilities
@@ -15,28 +13,30 @@ const getAgentCardStyle = (agent: Agent): React.CSSProperties => {
         case 'working':
             return {
                 borderColor: agent.color,
-                boxShadow: `0 0 25px ${agent.color}99`,
+                boxShadow: `0 0 20px ${agent.color}80, inset 0 0 10px ${agent.color}40`,
                 animation: 'agentPulse 2s infinite ease-in-out',
             };
         case 'error':
             return {
-                borderColor: '#CF6679',
-                boxShadow: `0 0 15px #CF667999`,
+                borderColor: '#EF4444', /* Red-500 */
+                boxShadow: `0 0 15px #EF444499`,
                 animation: 'agentError 0.5s linear',
             };
         case 'idle':
             return {
-                borderColor: agent.color,
-                animation: 'agentIdle 3s infinite ease-in-out',
+                borderColor: '#33363E', /* Darker border when idle */
+                animation: 'none',
+                opacity: 0.8,
             };
         case 'done':
             return {
                 borderColor: agent.color,
-                opacity: 0.9,
+                opacity: 1,
+                boxShadow: `0 0 10px ${agent.color}40`,
             };
         default:
             return {
-                borderColor: agent.color,
+                borderColor: '#33363E',
             };
     }
 };
@@ -50,21 +50,21 @@ const getAgentCardStyle = (agent: Agent): React.CSSProperties => {
  */
 const AgentCard: React.FC<{ agent: Agent }> = ({ agent }) => (
     <div
-        className={`agent-card bg-[#313328] rounded-lg p-3 mb-2 border-l-4 transition-all duration-300`}
+        className={`agent-card bg-panel rounded-lg p-3 mb-2 border-l-4 transition-all duration-300 shadow-md`}
         style={getAgentCardStyle(agent)}
     >
         <div
             className="agent-title font-bold text-sm mb-1"
-            style={{ color: agent.status === 'error' ? '#CF6679' : agent.color }}
+            style={{ color: agent.status === 'error' ? '#EF4444' : agent.color }}
         >
             {agent.title}
         </div>
-        <div className="agent-subtitle text-xs text-[#999966] mb-1.5">{agent.subtitle}</div>
+        <div className="agent-subtitle text-xs text-muted-text mb-1.5">{agent.subtitle}</div>
         <div className="agent-content text-xs min-h-[20px] flex items-center">
             {agent.status === 'working' && (
                 <div className="quantum-spinner w-4 h-4 inline-block mr-1.5 relative">
-                    <div className="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div>
-                    <div className="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div>
+                    <div className="absolute w-full h-full border-2 border-transparent border-t-agent-cognito rounded-full quantum-spinner::before"></div>
+                    <div className="absolute w-full h-full border-2 border-transparent border-b-agent-nexus rounded-full quantum-spinner::after"></div>
                 </div>
             )}
             {agent.status === 'done' && (
@@ -116,24 +116,24 @@ const AgentCard: React.FC<{ agent: Agent }> = ({ agent }) => (
  * @returns {React.ReactElement} The rendered consensus results panel.
  */
 const ConsensusPanel: React.FC<{ consensus: Consensus }> = ({ consensus }) => (
-    <div className="consensus-panel bg-[#313328] border border-[#BB86FC] rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto">
-        <div className="consensus-header font-bold text-[#BB86FC] mb-2.5 flex justify-between items-center">
+    <div className="consensus-panel bg-panel rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto border border-agent-nexus shadow-lg">
+        <div className="consensus-header font-bold text-agent-nexus mb-2.5 flex justify-between items-center text-base">
             <span>Multi-Agent Consensus Results</span>
-            <span className="bg-[#BB86FC] text-white px-1.5 py-0.5 rounded-full text-xs">Score: {consensus.score}</span>
+            <span className="bg-agent-nexus text-white px-2 py-0.5 rounded-full text-xs font-normal">Score: {consensus.score}</span>
         </div>
-        <div>
+        <div className="agent-list">
             {consensus.allCandidates.map((c, i) => (
                 <div
                     key={i}
-                    className={`candidate-item bg-white/5 rounded p-2 mb-2 border-l-4 ${
-                        i === 0 ? 'border-l-[#4ac94a] bg-green-500/10' : 'border-l-[#03DAC6]'
+                    className={`candidate-item bg-white/10 rounded-md p-2.5 mb-2 border-l-4 transition-all duration-200 ${
+                        i === 0 ? 'border-l-accent bg-accent/20 shadow-md' : 'border-l-agent-cognito hover:bg-white/15'
                     }`}
                 >
-                    <div className="text-xs text-[#999966] flex justify-between mb-1">
-                        <span>{c.agents.join(', ')}</span>
+                    <div className="text-xs text-muted-text flex justify-between mb-1.5">
+                        <span className="font-semibold text-white/80">{c.agents.join(', ')}</span>
                         <span>Count: {c.count}</span>
                     </div>
-                    <div className="text-xs font-mono whitespace-pre-wrap max-h-20 overflow-hidden text-ellipsis">
+                    <div className="text-xs font-mono whitespace-pre-wrap max-h-20 overflow-hidden text-ellipsis text-slate-300">
                         {c.content.substring(0, 200)}
                         {c.content.length > 200 ? '...' : ''}
                     </div>
@@ -159,8 +159,8 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
     }
 
     return (
-        <div className="grounding-panel bg-yellow-900/20 border border-[#FFD54F] rounded-lg p-3.5 mt-4">
-            <div className="flex items-center gap-2 font-bold text-[#FFD54F] mb-3">
+        <div className="grounding-panel bg-yellow-900/20 border border-agent-relay rounded-lg p-3.5 mt-4 shadow-lg">
+            <div className="flex items-center gap-2 font-bold text-agent-relay mb-3 text-base">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10 3.5a1.5 1.5 0 01.5 2.915V9.5a1.5 1.5 0 01-3 0V6.415A1.5 1.5 0 0110 3.5z" />
                     <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM2 10a8 8 0 1116 0 8 8 0 01-16 0z" />
@@ -170,7 +170,7 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
 
             {webChunks.length > 0 && (
                 <div className="mb-4">
-                    <h4 className="text-sm font-bold text-[#FFD54F] mb-2">Google Search Results:</h4>
+                    <h4 className="text-sm font-bold text-agent-relay mb-2">Google Search Results:</h4>
                     <ol className="list-decimal list-inside text-xs space-y-2 pl-1">
                         {webChunks.map((chunk, i) =>
                             chunk.web && (
@@ -194,7 +194,7 @@ const GroundingPanel: React.FC<{ chunks: GroundingChunk[] }> = ({ chunks }) => {
 
             {mapsChunks.length > 0 && (
                 <div>
-                    <h4 className="text-sm font-bold text-[#FFD54F] mb-2">Google Maps Results:</h4>
+                    <h4 className="text-sm font-bold text-agent-relay mb-2">Google Maps Results:</h4>
                     <ol className="list-decimal list-inside text-xs space-y-2 pl-1">
                         {mapsChunks.map((chunk, i) =>
                             chunk.maps && (
@@ -316,7 +316,7 @@ const DiffViewer: React.FC<{ before: string; after: string; query?: string }> = 
     const diff = useMemo(() => generateDiff(before, after), [before, after]);
 
     return (
-        <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
+        <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300 bg-black/30 p-2 rounded custom-scrollbar">
             {diff.map((line, index) => (
                 <div key={index} className={`flex items-center ${line.type === 'added' ? 'bg-green-900/40' : line.type === 'removed' ? 'bg-red-900/40' : ''}`}>
                     <span className={`w-4 text-center text-[0.6rem] flex-shrink-0 ${line.type === 'added' ? 'text-green-300' : line.type === 'removed' ? 'text-red-300' : 'text-gray-500'}`}>
@@ -361,8 +361,8 @@ const CodeReviewPanel: React.FC<{ findings: CodeReviewFinding[] }> = ({ findings
 
     if (findings.length === 0) {
         return (
-            <div className="code-review-panel bg-black/20 border border-gray-700 rounded-lg p-3.5 mt-4 text-center">
-                <div className="flex items-center gap-2 justify-center font-bold text-green-400 mb-2">
+            <div className="code-review-panel bg-panel rounded-lg p-3.5 mt-4 text-center border border-green-700 shadow-lg">
+                <div className="flex items-center gap-2 justify-center font-bold text-green-400 mb-2 text-base">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path
                             fillRule="evenodd"
@@ -377,8 +377,8 @@ const CodeReviewPanel: React.FC<{ findings: CodeReviewFinding[] }> = ({ findings
     }
 
     return (
-        <div className="code-review-panel bg-black/20 border border-red-900/50 rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto">
-            <div className="flex items-center gap-2 font-bold text-[#CF6679] mb-3">
+        <div className="code-review-panel bg-panel rounded-lg p-3.5 mt-4 max-h-72 overflow-y-auto border border-agent-sentinel shadow-lg">
+            <div className="flex items-center gap-2 font-bold text-agent-sentinel mb-3 text-base">
                 <svg
                     xmlns="http://www.w3.org/2000/svg"
                     className="h-5 w-5"
@@ -400,7 +400,7 @@ const CodeReviewPanel: React.FC<{ findings: CodeReviewFinding[] }> = ({ findings
                     return (
                         <div
                             key={i}
-                            className={`bg-white/5 rounded p-2 border-l-4 ${style.borderColor}`}
+                            className={`bg-white/5 rounded p-2 border-l-4 ${style.borderColor} shadow-sm`}
                         >
                             <div className="flex items-center gap-2 text-xs font-semibold mb-1">
                                 <svg
@@ -469,12 +469,12 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
             onClick={onClose}
         >
             <div
-                className="w-full max-w-4xl bg-[#2e3026] border border-[#BB86FC] rounded-lg shadow-2xl flex flex-col max-h-[90vh]"
+                className="w-full max-w-4xl bg-panel border border-agent-nexus rounded-lg shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
-                <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-[#f0f0e0] animation-title-pulse">Quantum AI Response</h2>
-                    <button onClick={onClose} className="text-xl text-gray-500 hover:text-white">
+                <header className="p-4 border-b border-gray-700 flex justify-between items-center bg-header-bg">
+                    <h2 className="text-lg font-bold text-white animation-title-pulse">Quantum AI Response</h2>
+                    <button onClick={onClose} className="text-xl text-gray-400 hover:text-white transition-colors">
                         &times;
                     </button>
                 </header>
@@ -487,10 +487,10 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                     </div>
 
                     {isLoading && (
-                        <div className="text-center text-lg text-[#03DAC6] mt-8 flex items-center justify-center gap-3">
+                        <div className="text-center text-lg text-agent-cognito mt-8 flex items-center justify-center gap-3">
                             <div className="quantum-spinner w-6 h-6 inline-block relative">
-                                <div className="absolute w-full h-full border-2 border-transparent border-t-[#03DAC6] rounded-full quantum-spinner::before"></div>
-                                <div className="absolute w-full h-full border-2 border-transparent border-b-[#BB86FC] rounded-full quantum-spinner::after"></div>
+                                <div className="absolute w-full h-full border-2 border-transparent border-t-agent-cognito rounded-full quantum-spinner::before"></div>
+                                <div className="absolute w-full h-full border-2 border-transparent border-b-agent-nexus rounded-full quantum-spinner::after"></div>
                             </div>
                             Processing Quantum Flux...
                         </div>
@@ -506,7 +506,7 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
 
                     {codeToDisplay && (
                         <div className="generated-code-section mt-6">
-                            <h3 className="text-base font-bold text-[#BB86FC] mb-2 flex items-center gap-2">
+                            <h3 className="text-base font-bold text-agent-nexus mb-2 flex items-center gap-2">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     className="h-5 w-5"
@@ -521,11 +521,11 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                                 </svg>
                                 Generated Code:
                             </h3>
-                            <div className="relative bg-black/20 rounded-lg p-3 border border-white/10">
+                            <div className="relative bg-black/20 rounded-lg p-3 border border-white/10 shadow-inner">
                                 {showDiff ? (
                                     <DiffViewer before={originalCode} after={codeToDisplay} />
                                 ) : (
-                                    <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300">
+                                    <pre className="text-xs font-mono whitespace-pre-wrap text-slate-300 custom-scrollbar">
                                         <code dangerouslySetInnerHTML={{ __html: highlightBasic(codeToDisplay, 'js') }} />
                                     </pre>
                                 )}
@@ -534,18 +534,18 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                     )}
                 </div>
 
-                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2 flex-shrink-0">
+                <footer className="p-4 border-t border-gray-700 flex justify-end gap-2 bg-header-bg flex-shrink-0">
                     {codeToDisplay && (
                         <>
                             <button
                                 onClick={() => onCopyCode(codeToDisplay)}
-                                className="bg-[#03DAC6] hover:bg-[#03a99e] text-black font-bold px-4 py-2 rounded transition-colors"
+                                className="bg-agent-cognito hover:bg-emerald-400 text-black font-bold px-4 py-2 rounded-md transition-colors"
                             >
                                 Copy Code
                             </button>
                             <button
                                 onClick={() => onApplyCode(codeToDisplay)}
-                                className="bg-[#4ac94a] hover:bg-green-400 text-white font-bold px-8 py-2 rounded transition-colors"
+                                className="bg-success hover:bg-green-400 text-white font-bold px-8 py-2 rounded-md transition-colors"
                             >
                                 Apply Code
                             </button>
@@ -553,7 +553,7 @@ export const AiResponsePanel: React.FC<AiResponsePanelProps> = ({
                     )}
                     <button
                         onClick={onClose}
-                        className="bg-[#a03333] hover:bg-red-700 text-white font-bold px-4 py-2 rounded transition-colors"
+                        className="bg-error hover:bg-red-600 text-white font-bold px-4 py-2 rounded-md transition-colors"
                     >
                         Close
                     </button>
