@@ -258,12 +258,12 @@ ${contextBeforeCursor}
 \`\`\`
 
 Based on this context, provide 3 to 5 concise and direct code completion suggestions.
-For each suggestion, also provide a very brief (single-line) documentation or type hint.
+For each suggestion, also provide detailed documentation including multi-line function signatures, parameter hints, and a brief description. Ensure this documentation clearly shows parameters and their types on separate lines if needed for clarity.
 Do NOT generate entire functions, explanations, or code blocks. Just the raw completion strings and their documentation.
 Return only a JSON array of objects, for example:
 [
-    { "suggestion": "console.log", "documentation": "Logs messages to the console." },
-    { "suggestion": "Math.random", "documentation": "Returns a pseudo-random number." }
+    { "suggestion": "console.log", "documentation": "console.log(message?: any, ...optionalParams: any[]): void\\nLogs messages to the console." },
+    { "suggestion": "Math.random", "documentation": "Math.random(): number\\nReturns a pseudo-random number between 0 and 1." }
 ]
 `;
 
@@ -284,7 +284,7 @@ Return only a JSON array of objects, for example:
                             },
                             documentation: {
                                 type: Type.STRING,
-                                description: 'A brief documentation or type hint for the suggestion.',
+                                description: 'Detailed documentation, including multi-line function signatures and parameter hints, possibly spanning several lines.',
                             },
                         },
                         required: ['suggestion'], // Documentation is optional, but preferred
@@ -292,7 +292,7 @@ Return only a JSON array of objects, for example:
                 },
                 // Small thinking budget for faster response, max output tokens for brevity
                 thinkingConfig: { thinkingBudget: 50 },
-                maxOutputTokens: 200, // Limit response size for completions
+                maxOutputTokens: 750, // Increased to allow for more detailed documentation
             },
         });
 

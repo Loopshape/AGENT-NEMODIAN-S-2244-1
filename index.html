@@ -74,7 +74,20 @@
         /* Custom style for editor selection highlighting */
         .editor-selection {
             background-color: rgba(187, 134, 252, 0.3); /* Subtle purple/blue */
+            border: 1px solid rgba(187, 134, 252, 0.7); /* More distinct border */
+            box-shadow: 0 0 8px rgba(187, 134, 252, 0.5); /* Subtle glow effect */
             border-radius: 2px;
+        }
+
+        .active-line {
+            background-color: rgba(187, 134, 252, 0.15); /* Soft pulsating background */
+            animation: quantumPulse 1.8s infinite alternate;
+        }
+
+        .editor-focused-outline {
+            outline: 2px solid rgba(187, 134, 252, 0.7); /* Subtle outline */
+            outline-offset: -2px;
+            animation: quantumPulse 2s infinite alternate;
         }
     </style>
 <script type="importmap">
