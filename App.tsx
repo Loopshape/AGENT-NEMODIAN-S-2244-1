@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type {
     Agent,
     AgentName,
@@ -47,13 +47,13 @@ const INITIAL_FILES: FolderNode = {
             type: 'folder',
             children: {
                 'style.css': {
-                    type: 'file',
                     content: `body {
     font-family: sans-serif;
     background-color: #f0f0f0;
     color: #333;
     padding: 2rem;
 }`,
+                    type: 'file',
                 },
             },
         },
@@ -61,8 +61,8 @@ const INITIAL_FILES: FolderNode = {
             type: 'folder',
             children: {
                 'main.js': {
-                    type: 'file',
                     content: `console.log('Quantum Fractal AI project loaded.');`,
+                    type: 'file',
                 },
             },
         },
@@ -135,12 +135,15 @@ const getLanguageFromPath = (path: string): string => {
         html: 'html',
         htm: 'html',
         xml: 'xml',
+        svg: 'xml', // SVG is XML
         php: 'php',
         sql: 'sql',
         json: 'json',
         py: 'py',
         sh: 'bash',
         bash: 'bash',
+        md: 'plaintext', // Markdown can be highlighted as plaintext or a custom markdown highlighter
+        txt: 'plaintext',
     };
     return langMap[extension.toLowerCase()] || 'plaintext';
 };
@@ -183,7 +186,8 @@ const App: React.FC = () => {
         snippet?: string;
     } | null>(null);
 
-    const [history, setHistory] = useState<string[]>([editorContent]);
+    // FIX: Rename the state setter for historyIndex to avoid redeclaration.
+    const [history, setHistoryContent] = useState<string[]>([editorContent]);
     const [historyIndex, setHistoryIndex] = useState(0);
 
     const [stats, setStats] = useState<EditorStats>({ cursor: '1:0', lines: 0, chars: 0, history: 1 });
@@ -208,6 +212,9 @@ const App: React.FC = () => {
 
     const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [geolocationError, setGeolocationError] = useState<string | null>(null);
+
+    // Ref for the hidden file input
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         // Request geolocation permission on component mount
@@ -470,11 +477,12 @@ const App: React.FC = () => {
             // Update editor state and history
             if (newContent === history[historyIndex]) return;
             const newHistory = [...history.slice(0, historyIndex + 1), newContent];
-            setHistory(newHistory);
+            setHistoryContent(newHistory);
+            // FIX: Use setHistoryIndex to update the history index.
             setHistoryIndex(newHistory.length - 1);
             setEditorContent(newContent);
         },
-        [activeFilePath, history, historyIndex]
+        [activeFilePath, history, historyIndex, setHistoryContent, setHistoryIndex]
     );
 
     const handleCommandSubmit = async (command: string) => {
@@ -590,6 +598,7 @@ const App: React.FC = () => {
     const handleUndo = () => {
         if (historyIndex > 0) {
             const newIndex = historyIndex - 1;
+            // FIX: Use setHistoryIndex to update the history index.
             setHistoryIndex(newIndex);
             handleSetContent(history[newIndex]);
         }
@@ -598,6 +607,7 @@ const App: React.FC = () => {
     const handleRedo = () => {
         if (historyIndex < history.length - 1) {
             const newIndex = historyIndex + 1;
+            // FIX: Use setHistoryIndex to update the history index.
             setHistoryIndex(newIndex);
             handleSetContent(history[newIndex]);
         }
@@ -605,6 +615,7 @@ const App: React.FC = () => {
 
     const handleRevertToState = (index: number) => {
         if (index >= 0 && index < history.length) {
+            // FIX: Use setHistoryIndex to update the history index.
             setHistoryIndex(index);
             handleSetContent(history[index]);
         }
@@ -766,10 +777,11 @@ const App: React.FC = () => {
             setEditorContent(node.content);
             setFileName(path.split('/').pop() || 'untitled');
             setFileType(getLanguageFromPath(path));
-            setHistory([node.content]);
+            setHistoryContent([node.content]);
+            // FIX: Use setHistoryIndex to update the history index.
             setHistoryIndex(0);
         }
-    }, [fileSystem]);
+    }, [fileSystem, setHistoryContent, setHistoryIndex]);
 
     const handleCreateFile = useCallback((path: string) => {
         const fileName = prompt('Enter new file name:');
@@ -842,32 +854,68 @@ const App: React.FC = () => {
         }
     };
 
-    const showHtmlSingleFile = useCallback(() => {
-        const htmlNode = get(fileSystem, '/index.html');
-        if (htmlNode && htmlNode.type === 'file') {
-            setActiveFilePath('/index.html');
-            setEditorContent(htmlNode.content);
-            setFileName('index.html');
-            setFileType('html');
-            setHistory([htmlNode.content]);
-            setHistoryIndex(0);
-        } else {
-            alert('index.html not found or is not a file in the current file system!');
+    // New handler for the "Load Script" button
+    const handleLoadScript = useCallback(() => {
+        fileInputRef.current?.click(); // Trigger the hidden file input click
+    }, []);
+
+    // Handler for when a file is selected via the file input dialog
+    const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
         }
-    }, [fileSystem]);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target?.result as string;
+            const newFileName = file.name;
+            const newFileType = getLanguageFromPath(newFileName);
+
+            // For now, load into a temporary virtual path. A full FS integration would involve
+            // adding it to the fileSystem state, but for 'Load Script' this suffices.
+            // If the user wants to save, they can use 'Save Draft'.
+            setActiveFilePath(`/temp/${newFileName}`); // Use a temporary path for loaded files
+            setEditorContent(content);
+            setFileName(newFileName);
+            setFileType(newFileType);
+            setHistoryContent([content]);
+            // FIX: Use setHistoryIndex to update the history index.
+            setHistoryIndex(0);
+
+            // Reset file input to allow selecting the same file again
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        };
+        reader.onerror = (e) => {
+            console.error('Error reading file:', reader.error);
+            alert(`Could not read file: ${reader.error?.message}`);
+        };
+        reader.readAsText(file, 'UTF-8'); // Explicitly read as UTF-8
+    }, [setHistoryContent, setHistoryIndex]);
 
     return (
         <div
             className="h-screen w-screen grid grid-rows-[max-content_max-content_1fr_max-content] grid-cols-1 relative overflow-hidden"
             style={{ gridTemplateAreas: '"header" "status" "main" "footer"' }}
         >
+            {/* Hidden file input for "Load Script" functionality */}
+            <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleFileSelect}
+                aria-label="Load script from file system"
+            />
+
             <Header
                 onToggleLeftPanel={() => setIsLeftPanelOpen((p) => !p)}
                 onTogglePreview={() => setIsPreviewOpen((p) => !p)}
                 isPreviewing={isPreviewOpen}
                 onRunAI={() => openPromptModal('ai')}
                 onRunOrchestrator={() => openPromptModal('orchestrator')}
-                onShowHtmlSingleFile={showHtmlSingleFile}
+                onLoadScript={handleLoadScript} // Use new handler
                 onFixCode={handleFixCode}
                 onGenerateCode={openCodeGenerationModal} // Pass new handler to Header
             />

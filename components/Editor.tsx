@@ -104,6 +104,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             testLine.style.display = 'block';
             testLine.style.fontSize = `${fontSize}px`;
             testLine.style.fontFamily = 'Fira Code, monospace';
+            testLine.style.lineHeight = '1.5em'; // Explicitly match line-height
             testLine.textContent = 'M'; // Any character to measure height
             document.body.appendChild(testLine);
             const height = testLine.offsetHeight;
@@ -140,20 +141,29 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         }
 
         const dummyDiv = document.createElement('div');
+        const textareaStyle = getComputedStyle(textarea);
+
+        // Copy all relevant styles from the textarea to the dummy div for precise measurement
         Object.assign(dummyDiv.style, {
             position: 'absolute',
             visibility: 'hidden',
-            whiteSpace: 'pre-wrap', // Essential for handling newlines correctly
-            fontFamily: getComputedStyle(textarea).fontFamily,
-            fontSize: getComputedStyle(textarea).fontSize,
-            lineHeight: getComputedStyle(textarea).lineHeight,
-            padding: getComputedStyle(textarea).padding,
-            border: getComputedStyle(textarea).border,
-            boxSizing: getComputedStyle(textarea).boxSizing,
-            width: `${textarea.clientWidth}px`, // Crucial to match text wrapping
+            whiteSpace: 'pre-wrap', 
+            fontFamily: textareaStyle.fontFamily,
+            fontSize: textareaStyle.fontSize,
+            lineHeight: textareaStyle.lineHeight,
+            padding: textareaStyle.padding,
+            border: textareaStyle.border,
+            boxSizing: textareaStyle.boxSizing,
+            width: `${textarea.clientWidth}px`, // Match clientWidth for wrapping
             height: `${textarea.clientHeight}px`,
-            overflow: 'auto', // Mimic scroll behavior
-            wordBreak: 'break-all', // Or 'normal', depends on editor's actual word-break behavior
+            overflow: textareaStyle.overflow, // Mimic scroll behavior
+            wordBreak: textareaStyle.wordBreak,
+            wordWrap: textareaStyle.wordWrap,
+            // Ensure padding-top and padding-bottom are zeroed out if they were set by virtualization
+            paddingTop: '0px', 
+            paddingBottom: '0px',
+            top: `${textarea.offsetTop}px`, // Align to textarea's position
+            left: `${textarea.offsetLeft}px`,
         });
 
         const textBeforeCursor = textarea.value.substring(0, cursorOffset);
@@ -166,6 +176,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
         document.body.appendChild(dummyDiv);
 
         // Temporarily apply textarea's scroll to the dummyDiv to get correct scroll-adjusted position
+        // This is key for accurate measurement of visible text position
         dummyDiv.scrollTop = textarea.scrollTop;
         dummyDiv.scrollLeft = textarea.scrollLeft;
 
@@ -187,7 +198,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             top: Math.max(0, top + 5), // Add a small vertical offset below cursor
             left: Math.max(0, left),
         };
-    }, [fontSize]);
+    }, []); // Removed fontSize from dependency as getComputedStyle handles it
 
     // FIX: Moved `handleScroll` definition before `applyCompletion` as it's a dependency.
     // Scroll handler and virtualization logic
@@ -202,7 +213,9 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 highlightCodeRef.current.parentElement.scrollLeft = scrollLeft;
             }
             if (linesRef.current) {
-                linesRef.current.scrollLeft = scrollLeft; // Adjust if line numbers can scroll horizontally
+                // Line numbers should only scroll horizontally if they have content wider than their container
+                // but typically they don't; keep this if future styling might make them wide
+                linesRef.current.scrollLeft = scrollLeft; 
             }
 
             const firstVisibleLine = Math.floor(scrollTop / effectiveLineHeight);

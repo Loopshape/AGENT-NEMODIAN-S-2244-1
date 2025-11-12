@@ -9,7 +9,7 @@ interface HeaderProps {
     isPreviewing: boolean;
     onRunAI: () => void;
     onRunOrchestrator: () => void;
-    onShowHtmlSingleFile: () => void;
+    onLoadScript: () => void; // Renamed from onShowHtmlSingleFile
     onFixCode: () => void;
     onGenerateCode: () => void; // New prop for AI Generate Code
 }
@@ -23,7 +23,7 @@ interface HeaderProps {
  * @param {boolean} props.isPreviewing - Indicates if the live preview is active.
  * @param {() => void} props.onRunAI - Opens the prompt modal for a single Quantum AI run.
  * @param {() => void} props.onRunOrchestrator - Opens the prompt modal for a Multi-Agent Consensus run.
- * @param {() => void} props.onShowHtmlSingleFile - Opens the index.html file in the editor.
+ * @param {() => void} props.onLoadScript - Triggers a file selection dialog to load a script.
  * @param {() => void} props.onFixCode - Initiates an AI-driven quick code fix.
  * @param {() => void} props.onGenerateCode - Opens the modal for AI code generation.
  * @returns {React.ReactElement} The rendered header component.
@@ -52,7 +52,7 @@ export const Header: React.FC<HeaderProps> = (props) => (
                 {props.isPreviewing ? 'Close Preview' : 'Live Preview'}
             </button>
             <button
-                onClick={props.onShowHtmlSingleFile}
+                onClick={props.onLoadScript} // Use new prop
                 className="bg-[#f0ad4e] border-[#f0ad4e] text-[#3a3c31] hover:bg-yellow-400 text-xs px-2 py-1.5 rounded transition-colors"
             >
                 Load Script
@@ -221,7 +221,9 @@ const FileTreeItem: React.FC<
                     {isFolder ? (
                         <span className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     ) : (
-                        <span className="opacity-50">●</span>
+                        <svg className="w-3 h-3 text-[#999966]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
                     )}
                     {isRenaming ? (
                         <input
@@ -244,24 +246,41 @@ const FileTreeItem: React.FC<
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {!isFolder && ( // Show "Open" button only for files
                             <ActionButton title="Open File" onClick={() => onOpenFile(path)}>
-                                &#128220; {/* Document/File icon */}
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
                             </ActionButton>
                         )}
                         {isFolder && (
                             <>
                                 <ActionButton title="New File" onClick={() => rest.onCreateFile(path)}>
-                                    +&#📄;
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    <svg className="w-3 h-3 -ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                    </svg>
                                 </ActionButton>
                                 <ActionButton title="New Folder" onClick={() => rest.onCreateFolder(path)}>
-                                    +&#📁;
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                    </svg>
+                                    <svg className="w-3 h-3 -ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                    </svg>
                                 </ActionButton>
                             </>
                         )}
                         <ActionButton title="Rename" onClick={() => setIsRenaming(true)}>
-                            &#✏️;
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
                         </ActionButton>
                         <ActionButton title="Delete" onClick={() => rest.onDelete(path)}>
-                            &#🗑️;
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                         </ActionButton>
                     </div>
                 )}
