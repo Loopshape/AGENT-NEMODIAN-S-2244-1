@@ -25,15 +25,15 @@ export interface MapsPlaceAnswerSource {
 }
 
 export interface MapsGrounding {
-    uri?: string;
-    title?: string;
+    uri?: string; // FIX: Made optional to align with @google/genai types
+    title?: string; // FIX: Made optional to align with @google/genai types
     placeAnswerSources?: MapsPlaceAnswerSource[];
 }
 
 export interface GroundingChunk {
     web?: {
-        uri: string;
-        title: string;
+        uri?: string; // FIX: Made optional to align with @google/genai types
+        title?: string; // FIX: Made optional to align with @google/genai types
         snippet?: string; // Added snippet for more detailed search info
     };
     maps?: MapsGrounding; // Added for Google Maps grounding

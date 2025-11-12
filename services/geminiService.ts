@@ -1,3 +1,5 @@
+/// <reference types="node" /> // Temporarily kept for TS checking in mixed environment, will be removed if no Node.js globals are used
+
 import { GoogleGenAI, GenerateContentResponse, Type } from '@google/genai';
 import type { Candidate, Persona, CodeReviewFinding, GroundingChunk } from '../types';
 
@@ -46,6 +48,10 @@ const getCacheKey = (
  */
 const loadFromCache = (key: string): { code: string; groundingChunks?: GroundingChunk[] } | null => {
     try {
+        // Ensure localStorage is available before attempting to use it
+        if (typeof localStorage === 'undefined') {
+            return null;
+        }
         const cachedItem = localStorage.getItem(key);
         if (cachedItem) {
             const { timestamp, code, groundingChunks } = JSON.parse(cachedItem);
@@ -59,7 +65,10 @@ const loadFromCache = (key: string): { code: string; groundingChunks?: Grounding
         }
     } catch (error) {
         console.error('Error loading from cache:', error);
-        localStorage.removeItem(key); // Remove potentially corrupted cache entry
+        // Only attempt to remove from localStorage if it exists and error is not due to its absence
+        if (typeof localStorage !== 'undefined') {
+            localStorage.removeItem(key); // Remove potentially corrupted cache entry
+        }
     }
     return null;
 };
@@ -72,6 +81,10 @@ const loadFromCache = (key: string): { code: string; groundingChunks?: Grounding
  */
 const saveToCache = (key: string, code: string, groundingChunks: GroundingChunk[]) => {
     try {
+        // Ensure localStorage is available before attempting to use it
+        if (typeof localStorage === 'undefined') {
+            return;
+        }
         const itemToCache = {
             timestamp: Date.now(),
             code,
@@ -88,14 +101,15 @@ const saveToCache = (key: string, code: string, groundingChunks: GroundingChunk[
  * Generates content as a stream with the "thinking" feature enabled and processes the stream.
  * This provides a more detailed, step-by-step generation process for complex tasks.
  * It calls a callback function on each chunk to allow for real-time UI updates.
+ * If no onUpdate callback is provided, it accumulates the entire response and returns it.
  * @param {string} prompt - The user's specific request.
  * @param {string} context - The current code or context from the editor.
  * @param {boolean} withSearch - Whether to enable Google Search grounding for the request.
  * @param {boolean} withMaps - Whether to enable Google Maps grounding for the request.
  * @param {number} latitude - Optional latitude for Maps grounding.
  * @param {number} longitude - Optional longitude for Maps grounding.
- * @param {(update: { code: string; groundingChunks?: GroundingChunk[] }) => void} onUpdate - Callback for each stream update.
- * @returns {Promise<void>} A promise that resolves when the stream is fully processed.
+ * @param {(update: { code: string; groundingChunks?: GroundingChunk[] }) => void} [onUpdate] - Optional callback for each stream update.
+ * @returns {Promise<{ code: string; groundingChunks?: GroundingChunk[] }>} A promise that resolves with the final code and grounding chunks.
  */
 export const generateWithThinkingStream = async (
     prompt: string,
@@ -104,8 +118,8 @@ export const generateWithThinkingStream = async (
     withMaps: boolean,
     latitude: number | null,
     longitude: number | null,
-    onUpdate: (update: { code: string; groundingChunks?: GroundingChunk[] }) => void
-): Promise<void> => {
+    onUpdate?: (update: { code: string; groundingChunks?: GroundingChunk[] }) => void
+): Promise<{ code: string; groundingChunks?: GroundingChunk[] }> => {
     const fullPrompt = `You are a world-class software architect and principal engineer, an expert in complex algorithms and system design. Your mission is to generate, refactor, or optimize code to solve sophisticated algorithmic challenges.
 Internally, you must deconstruct the problem, think step-by-step, consider various data structures, analyze time and space complexity, and anticipate edge cases to architect the most robust and performant solution.
 
@@ -146,12 +160,13 @@ Produce only the final, complete, and production-ready code block as your respon
     }
 
     // Attempt to load from cache if grounding is used
+    // Note: LocalStorage is not available in Node.js CLI environment, this will only work in browser.
     const cacheKey = getCacheKey(prompt, context, withSearch, withMaps, latitude, longitude);
-    if ((withSearch || withMaps) && cacheKey) {
+    if (typeof localStorage !== 'undefined' && (withSearch || withMaps) && cacheKey) {
         const cachedResult = loadFromCache(cacheKey);
         if (cachedResult) {
-            onUpdate(cachedResult); // Provide the complete cached result immediately
-            return;
+            onUpdate?.(cachedResult); // Provide the complete cached result immediately
+            return cachedResult;
         }
     }
 
@@ -177,18 +192,45 @@ Produce only the final, complete, and production-ready code block as your respon
             // Safely process grounding chunks
             const newChunks = chunk.candidates?.[0]?.groundingMetadata?.groundingChunks;
             if (Array.isArray(newChunks)) {
-                newChunks.forEach((newChunk: GroundingChunk) => {
+                // FIX: Explicitly type the newChunk parameter in forEach to `import('@google/genai').GroundingChunk`
+                // to match the type returned by the API, then map it to the local `GroundingChunk` interface.
+                newChunks.forEach((newChunk: import('@google/genai').GroundingChunk) => {
+                    const mappedChunk: GroundingChunk = {
+                        web: newChunk.web ? {
+                            uri: newChunk.web.uri,
+                            title: newChunk.web.title,
+                            // FIX: Removed 'snippet' as it is not present in the @google/genai GroundingChunkWeb type.
+                        } : undefined,
+                        maps: newChunk.maps ? {
+                            uri: newChunk.maps.uri,
+                            title: newChunk.maps.title,
+                            // FIX: newChunk.maps.placeAnswerSources is a single object, not an array, from the API.
+                            // Wrap it in an array to match the local MapsGrounding type.
+                            placeAnswerSources: newChunk.maps.placeAnswerSources ?
+                                [
+                                    { // Map the single external source to a local MapsPlaceAnswerSource
+                                        uri: newChunk.maps.placeAnswerSources.uri,
+                                        title: newChunk.maps.placeAnswerSources.title,
+                                        reviewSnippets: newChunk.maps.placeAnswerSources.reviewSnippets?.map(review => ({
+                                            displayText: review.displayText,
+                                            uri: review.uri,
+                                        })),
+                                    }
+                                ] : undefined,
+                        } : undefined,
+                    };
+
                     // Only add unique web URIs or unique maps URIs
-                    if (newChunk.web?.uri && !allGroundingChunks.some((existing) => existing.web?.uri === newChunk.web?.uri)) {
-                        allGroundingChunks.push(newChunk);
-                    } else if (newChunk.maps?.uri && !allGroundingChunks.some((existing) => existing.maps?.uri === newChunk.maps?.uri)) {
-                        allGroundingChunks.push(newChunk);
+                    if (mappedChunk.web?.uri && !allGroundingChunks.some((existing) => existing.web?.uri === mappedChunk.web?.uri)) {
+                        allGroundingChunks.push(mappedChunk);
+                    } else if (mappedChunk.maps?.uri && !allGroundingChunks.some((existing) => existing.maps?.uri === mappedChunk.maps?.uri)) {
+                        allGroundingChunks.push(mappedChunk);
                     }
                 });
             }
 
             // Provide the latest state to the caller
-            onUpdate({
+            onUpdate?.({
                 code: accumulatedCode,
                 groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : undefined,
             });
@@ -198,10 +240,16 @@ Produce only the final, complete, and production-ready code block as your respon
         }
     }
 
+    const finalResult = {
+        code: accumulatedCode,
+        groundingChunks: allGroundingChunks.length > 0 ? allGroundingChunks : undefined,
+    };
+
     // After stream completes, save the final result to cache if grounding was used
-    if ((withSearch || withMaps) && cacheKey && accumulatedCode) {
+    if (typeof localStorage !== 'undefined' && (withSearch || withMaps) && cacheKey && accumulatedCode) {
         saveToCache(cacheKey, accumulatedCode, allGroundingChunks);
     }
+    return finalResult;
 };
 
 export interface CompletionSuggestion {
@@ -230,20 +278,22 @@ export const requestCodeCompletion = async (
 
     // Check cache first
     const cacheKey = `${COMPLETION_CACHE_PREFIX}${fileType}:${currentPrefix}`;
-    try {
-        const cachedItem = localStorage.getItem(cacheKey);
-        if (cachedItem) {
-            const { timestamp, suggestions } = JSON.parse(cachedItem);
-            if (Date.now() - timestamp < COMPLETION_CACHE_EXPIRATION_MS) {
-                console.log(`Loading completion from cache: ${currentPrefix}`);
-                return suggestions;
-            } else {
-                localStorage.removeItem(cacheKey); // Clean up expired cache
+    if (typeof localStorage !== 'undefined') { // Check if localStorage is available
+        try {
+            const cachedItem = localStorage.getItem(cacheKey);
+            if (cachedItem) {
+                const { timestamp, suggestions } = JSON.parse(cachedItem);
+                if (Date.now() - timestamp < COMPLETION_CACHE_EXPIRATION_MS) {
+                    console.log(`Loading completion from cache: ${currentPrefix}`);
+                    return suggestions;
+                } else {
+                    localStorage.removeItem(cacheKey); // Clean up expired cache
+                }
             }
+        } catch (error) {
+            console.error('Error loading completion from cache:', error);
+            localStorage.removeItem(cacheKey); // Remove potentially corrupted cache entry
         }
-    } catch (error) {
-        console.error('Error loading completion from cache:', error);
-        localStorage.removeItem(cacheKey); // Remove potentially corrupted cache entry
     }
 
     const model = 'gemini-2.5-flash'; // Optimized for speed
@@ -296,7 +346,12 @@ Return only a JSON array of objects, for example:
             },
         });
 
-        const jsonStr = response.text.trim();
+        let jsonStr = response.text.trim();
+        // Remove markdown code block fences if present in the response
+        if (jsonStr.startsWith('```json') && jsonStr.endsWith('```')) {
+            jsonStr = jsonStr.substring(7, jsonStr.length - 3).trim();
+        }
+
         const suggestions: CompletionSuggestion[] = JSON.parse(jsonStr);
 
         if (!Array.isArray(suggestions) || !suggestions.every(s => typeof s.suggestion === 'string')) {
@@ -305,11 +360,13 @@ Return only a JSON array of objects, for example:
         }
 
         // Cache the results
-        try {
-            localStorage.setItem(cacheKey, JSON.stringify({ suggestions, timestamp: Date.now() }));
-            console.log(`Saved completion to cache: ${currentPrefix}`);
-        } catch (cacheError) {
-            console.warn('Could not save completion to cache:', cacheError);
+        if (typeof localStorage !== 'undefined') {
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({ suggestions, timestamp: Date.now() }));
+                console.log(`Saved completion to cache: ${currentPrefix}`);
+            } catch (cacheError) {
+                console.warn('Could not save completion to cache:', cacheError);
+            }
         }
 
         return suggestions;
@@ -340,16 +397,6 @@ export const personas: Persona[] = [
         name: 'Modernist Developer',
         description:
             'Leverages the latest language features, functional programming concepts, and modern idioms to write concise and expressive code.',
-    },
-    {
-        name: 'Robustness Engineer',
-        description:
-            'Emphasizes resilience and reliability. Writes code with comprehensive error handling, input validation, and edge-case management.',
-    },
-    {
-        name: 'Data Structures Specialist',
-        description:
-            'Solves problems from a data-structures-first perspective, always choosing the most optimal data structure for the task at hand.',
     },
     {
         name: 'Theoretical Scientist',
@@ -436,8 +483,9 @@ Produce only the final, complete, and production-ready code block as your respon
     responses.forEach((res, i) => {
         const content = res.text.trim();
         if (content) {
-            const codeMatch = content.match(/```(?:[\w]*)\n?([\s\S]*?)```/);
-            const finalContent = (codeMatch ? codeMatch[1] : content).trim();
+            // Updated regex to more robustly extract code blocks, if present
+            const codeMatch = content.match(/```(?:[\w\s]*)\n?([\s\S]*?)```/);
+            const finalContent = (codeMatch && codeMatch[1] ? codeMatch[1].trim() : content).trim();
 
             if (!finalContent) return;
 
@@ -523,7 +571,13 @@ Return your findings as a JSON object that adheres to the provided schema.
     });
 
     try {
-        const jsonResponse = JSON.parse(response.text);
+        let jsonResponseText = response.text.trim();
+        // Remove markdown code block fences if present in the response
+        if (jsonResponseText.startsWith('```json') && jsonResponseText.endsWith('```')) {
+            jsonResponseText = jsonResponseText.substring(7, jsonResponseText.length - 3).trim();
+        }
+
+        const jsonResponse = JSON.parse(jsonResponseText);
         if (jsonResponse && Array.isArray(jsonResponse.findings)) {
             return jsonResponse.findings as CodeReviewFinding[];
         }
@@ -557,5 +611,8 @@ ${codeContent}
     // The guideline states: "Produce only the final, complete, and production-ready code block as your response.
     // Do not include any explanations, markdown formatting, or other text outside of the code."
     // So, response.text should already be the code.
-    return response.text.trim();
+    let generatedCode = response.text.trim();
+    // Remove markdown code block fences if present in the response
+    const codeMatch = generatedCode.match(/```(?:[\w\s]*)\n?([\s\S]*?)```/);
+    return (codeMatch && codeMatch[1] ? codeMatch[1].trim() : generatedCode).trim();
 };
