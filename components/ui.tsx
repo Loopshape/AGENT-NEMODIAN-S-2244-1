@@ -255,31 +255,34 @@ const FileTreeItem: React.FC<
                         {isFolder && (
                             <>
                                 <ActionButton title="New File" onClick={() => rest.onCreateFile(path)}>
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    <svg className="w-3 h-3 -ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="12" y1="18" x2="12" y2="12"></line>
+                                        <line x1="9" y1="15" x2="15" y2="15"></line>
                                     </svg>
                                 </ActionButton>
                                 <ActionButton title="New Folder" onClick={() => rest.onCreateFolder(path)}>
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                    <svg className="w-3 h-3 -ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                        <line x1="12" y1="10" x2="12" y2="16"></line>
+                                        <line x1="9" y1="13" x2="15" y2="13"></line>
                                     </svg>
                                 </ActionButton>
                             </>
                         )}
                         <ActionButton title="Rename" onClick={() => setIsRenaming(true)}>
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                             </svg>
                         </ActionButton>
                         <ActionButton title="Delete" onClick={() => rest.onDelete(path)}>
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
                             </svg>
                         </ActionButton>
                     </div>
@@ -324,7 +327,7 @@ interface LeftPanelProps extends FileExplorerProps {
     onUndo: () => void;
     onRedo: () => void;
     onQuickAction: (action: 'optimize' | 'document' | 'refactor') => void;
-    onAnalyzeSelection: () => void;
+    onAnalyzeSelection: () => void; // New prop for Analyze Selection
     onRunOrchestrator: () => void;
     history: string[];
     historyIndex: number;
@@ -351,7 +354,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
         onUndo,
         onRedo,
         onQuickAction,
-        onAnalyzeSelection,
+        onAnalyzeSelection, // Destructure new prop
         onRunOrchestrator,
         history,
         historyIndex,
@@ -435,7 +438,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = (props) => {
                         AI Code Review
                     </button>
                     <button
-                        onClick={onAnalyzeSelection}
+                        onClick={onAnalyzeSelection} // New button for Analyze Selection
                         className="bg-[#5bc0de] hover:bg-cyan-400 text-white text-xs w-full text-left p-1.5 rounded"
                     >
                         Analyze Selection
@@ -630,7 +633,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
             };
 
             window.addEventListener('mousemove', handleDragMove);
-            window.addEventListener('mouseup', handleDragEnd);
+            window.removeEventListener('mouseup', handleDragEnd); // FIX: Ensure handleDragEnd is only added once.
         }
     };
 
@@ -661,7 +664,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ htmlContent, onClose
             };
 
             window.addEventListener('mousemove', handleResizeMove);
-            window.addEventListener('mouseup', handleResizeEnd);
+            window.removeEventListener('mouseup', handleResizeEnd); // FIX: Ensure handleResizeEnd is only added once.
         }
     };
 

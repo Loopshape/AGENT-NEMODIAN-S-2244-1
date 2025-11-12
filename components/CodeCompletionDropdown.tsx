@@ -81,7 +81,7 @@ export const CodeCompletionDropdown: React.FC<CodeCompletionDropdownProps> = ({
                     aria-selected={index === selectedSuggestionIndex}
                     id={`completion-option-${index}`}
                 >
-                    <div>{item.suggestion}</div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{item.suggestion}</div>
                     {item.documentation && (
                         <div className="text-xs text-slate-400 font-normal mt-0.5" style={{ fontSize: `${fontSize * 0.8}px` }}>
                             {item.documentation}

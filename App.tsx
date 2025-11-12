@@ -213,6 +213,10 @@ const App: React.FC = () => {
     const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
     const [geolocationError, setGeolocationError] = useState<string | null>(null);
 
+    // State to track selection in the editor
+    const [selectionStart, setSelectionStart] = useState(0);
+    const [selectionEnd, setSelectionEnd] = useState(0);
+
     // Ref for the hidden file input
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -760,15 +764,15 @@ const App: React.FC = () => {
     };
 
 
-    const handleAnalyzeSelection = () => {
-        const selection = window.getSelection()?.toString() || '';
-        if (selection) {
-            openPromptModal('ai', 'Analyze and improve this code snippet:', selection);
+    const handleAnalyzeSelection = useCallback(() => {
+        const selectedText = editorContent.substring(selectionStart, selectionEnd);
+        if (selectedText) {
+            openPromptModal('ai', 'Analyze and improve this code snippet:', selectedText);
         } else {
             // Optionally, provide feedback if nothing is selected
             alert('Please select some code in the editor first.');
         }
-    };
+    }, [editorContent, selectionStart, selectionEnd]);
 
     const handleOpenFile = useCallback((path: string) => {
         const node = get(fileSystem, path);
@@ -955,6 +959,7 @@ const App: React.FC = () => {
                         fileType={fileType}
                         onStatsChange={handleStatsChange}
                         fontSize={editorFontSize}
+                        onSelectionChange={(start, end) => { setSelectionStart(start); setSelectionEnd(end); }}
                     />
                 </div>
             </main>

@@ -9,6 +9,7 @@ interface EditorProps {
     fileType: string;
     onStatsChange: (stats: { cursor: string; lines: number; chars: number }) => void;
     fontSize: number;
+    onSelectionChange: (start: number, end: number) => void; // New prop for selection changes
 }
 
 // --- START: Tokenizer-based Highlighter (using shared utils) ---
@@ -64,7 +65,7 @@ const highlight = (text: string, language: string, selectionStart: number, selec
 
 const BUFFER_LINES = 20; // Number of extra lines to render above and below the viewport
 
-export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, onStatsChange, fontSize }) => {
+export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, onStatsChange, fontSize, onSelectionChange }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const highlightCodeRef = useRef<HTMLElement>(null); // Refers to the <code> element
     const linesRef = useRef<HTMLDivElement>(null);
@@ -268,13 +269,14 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             textarea.selectionStart = textarea.selectionEnd = currentCompletionStartIndex + suggestion.length;
             setSelectionStartFull(textarea.selectionStart);
             setSelectionEndFull(textarea.selectionEnd);
+            onSelectionChange(textarea.selectionStart, textarea.selectionEnd); // Report new selection
             textarea.focus(); // Ensure textarea keeps focus
             // Manually trigger scroll handler to update virtualization after content change
             handleScroll({ currentTarget: textarea } as React.UIEvent<HTMLTextAreaElement>);
         }, 0);
 
         hideCompletion();
-    }, [currentCompletionStartIndex, currentCompletionPrefix.length, setContent, hideCompletion, handleScroll]);
+    }, [currentCompletionStartIndex, currentCompletionPrefix.length, setContent, hideCompletion, handleScroll, onSelectionChange]);
 
     // Debounced function to trigger completion check
     const triggerCompletionCheck = useCallback(() => {
@@ -328,9 +330,10 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             // Update selection immediately after content change to keep it accurate
             setSelectionStartFull(e.target.selectionStart);
             setSelectionEndFull(e.target.selectionEnd);
+            onSelectionChange(e.target.selectionStart, e.target.selectionEnd); // Report new selection
             triggerCompletionCheck(); // Trigger debounced completion check
         },
-        [setContent, triggerCompletionCheck]
+        [setContent, triggerCompletionCheck, onSelectionChange]
     );
 
     // Update stats and selection positions
@@ -350,6 +353,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
             });
             setSelectionStartFull(selectionStart);
             setSelectionEndFull(selectionEnd);
+            onSelectionChange(selectionStart, selectionEnd); // Report new selection
             
             // Re-trigger scroll to ensure virtualization state is consistent with potential programmatic scroll or keyboard navigation
             handleScroll({ currentTarget: textarea } as React.UIEvent<HTMLTextAreaElement>);
@@ -373,7 +377,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 clearTimeout(completionTimeoutRef.current);
             }
         };
-    }, [content, onStatsChange, handleScroll, showCompletion, getCompletionPosition]);
+    }, [content, onStatsChange, handleScroll, showCompletion, getCompletionPosition, onSelectionChange]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (showCompletion) {
@@ -412,6 +416,7 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
                 setSelectionStartFull(start + 2); // Update selection state after tab
                 setSelectionEndFull(start + 2);
+                onSelectionChange(start + 2, start + 2); // Report new selection
             }, 0);
         } else if (e.key === 'Tab' && e.shiftKey) { // Handle Shift+Tab for dedentation
             e.preventDefault();
@@ -429,9 +434,11 @@ export const Editor: React.FC<EditorProps> = ({ content, setContent, fileType, o
                 const dedentedValue = textBefore + textAfter.substring(2);
                 setContent(dedentedValue);
                 setTimeout(() => {
-                    e.currentTarget.selectionStart = e.currentTarget.selectionEnd = Math.max(lineStart, start - 2);
-                    setSelectionStartFull(e.currentTarget.selectionStart);
-                    setSelectionEndFull(e.currentTarget.selectionEnd);
+                    const newCursorPos = Math.max(lineStart, start - 2);
+                    e.currentTarget.selectionStart = e.currentTarget.selectionEnd = newCursorPos;
+                    setSelectionStartFull(newCursorPos);
+                    setSelectionEndFull(newCursorPos);
+                    onSelectionChange(newCursorPos, newCursorPos); // Report new selection
                 }, 0);
             }
         }
