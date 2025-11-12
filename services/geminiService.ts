@@ -38,7 +38,12 @@ const getCacheKey = (
     longitude: number | null,
 ): string => {
     const keyData = { prompt, context, withSearch, withMaps, latitude, longitude };
-    return CACHE_PREFIX + btoa(JSON.stringify(keyData)); // Base64 encode for safer localStorage keys
+    const jsonString = JSON.stringify(keyData);
+    // Safely encode Unicode characters before Base64 encoding
+    const encodedString = encodeURIComponent(jsonString).replace(/%([0-9A-F]{2})/g, (match, p1) =>
+        String.fromCharCode(parseInt(p1, 16))
+    );
+    return CACHE_PREFIX + btoa(encodedString); // Base64 encode for safer localStorage keys
 };
 
 /**
